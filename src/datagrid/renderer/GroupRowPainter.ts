@@ -14,11 +14,11 @@ export class GroupRowPainter {
   ): void {
     ctx.save();
 
-    // 1. Zemin
+    // 1. Background
     ctx.fillStyle = theme.canvas.groupRowBg;
     ctx.fillRect(0, y, width, height);
 
-    // 2. Alt Çizgi
+    // 2. Bottom Border
     ctx.strokeStyle = theme.canvas.groupRowBorder;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -26,19 +26,21 @@ export class GroupRowPainter {
     ctx.lineTo(width, y + height - 0.5);
     ctx.stroke();
 
-    // 3. Girinti & Açılır Ok (▶ / ▼)
-    const indent = 16 + groupRow.level * 20;
+    // 3. Left Accent Bar by Level
+    ctx.fillStyle = theme.dom.accentColor;
+    ctx.fillRect(groupRow.level * 6, y, 3, height);
+
+    // 4. Indent & Chevron (▶ / ▼)
+    const indent = 18 + groupRow.level * 20;
     const midY = y + height / 2;
 
     ctx.fillStyle = theme.canvas.groupRowText;
     ctx.beginPath();
     if (groupRow.isExpanded) {
-      // Aşağı ok (▼)
       ctx.moveTo(indent - 4, midY - 2);
       ctx.lineTo(indent + 4, midY - 2);
       ctx.lineTo(indent, midY + 3);
     } else {
-      // Sağa ok (▶)
       ctx.moveTo(indent - 2, midY - 4);
       ctx.lineTo(indent - 2, midY + 4);
       ctx.lineTo(indent + 3, midY);
@@ -46,24 +48,30 @@ export class GroupRowPainter {
     ctx.closePath();
     ctx.fill();
 
-    // 4. Grup Başlığı Metni
+    // 5. Group Title
     ctx.fillStyle = theme.canvas.groupRowText;
     ctx.font = `600 ${theme.fontSize}px ${theme.fontFamily}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    const title = `${groupRow.field}: ${groupRow.value} (${locale.groupRecordCount(groupRow.rowCount)})`;
+    const title = `${groupRow.field.toUpperCase()}: ${groupRow.value} (${locale.groupRecordCount(groupRow.rowCount)})`;
     ctx.fillText(title, indent + 12, midY);
 
-    // 5. Grup İçi Özetler (Varsa sağa doğru)
+    // 6. Group Summaries on the right
     if (groupRow.summaries && Object.keys(groupRow.summaries).length > 0) {
       const summaryText = Object.entries(groupRow.summaries)
-        .map(([k, v]) => `${k}: ${Number(v).toLocaleString(locale.code)}`)
-        .join(' | ');
+        .slice(0, 4)
+        .map(([k, v]) => {
+          const sType = groupRow.summaryTypes?.[k] || 'sum';
+          return `${k} (${sType.toUpperCase()}): ${Number(v).toLocaleString(locale.code, {
+            maximumFractionDigits: 2,
+          })}`;
+        })
+        .join('   •   ');
 
-      ctx.fillStyle = theme.isDark ? '#8E8E93' : '#6E6E73';
-      ctx.font = `500 ${theme.fontSize - 1}px ${theme.fontFamily}`;
+      ctx.fillStyle = theme.isDark ? '#98989D' : '#6E6E73';
+      ctx.font = `600 ${theme.fontSize - 1}px ${theme.fontFamily}`;
       ctx.textAlign = 'right';
-      ctx.fillText(summaryText, width - 20, midY);
+      ctx.fillText(summaryText, width - 24, midY);
     }
 
     ctx.restore();
