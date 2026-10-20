@@ -120,6 +120,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
 
   // DOM Eleman Referansları
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const gridSurfaceRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -158,6 +159,36 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   useEffect(() => {
     requestRender();
   }, [requestRender, resolvedTheme, currentLocale]);
+
+  // 6b. Resize Observer & Ekran / Pencere Boyut Değişimi Takibi
+  useEffect(() => {
+    const handleResize = () => {
+      requestRender();
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        requestRender();
+      });
+      if (gridSurfaceRef.current) {
+        observer.observe(gridSurfaceRef.current);
+      }
+      if (containerRef.current) {
+        observer.observe(containerRef.current);
+      }
+      if (canvasRef.current) {
+        observer.observe(canvasRef.current);
+      }
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      observer?.disconnect();
+    };
+  }, [requestRender]);
 
   // 7. Sütun Sıralama (Çoklu Shift+Click Destekli)
   const handleHeaderClick = (colIndex: number, isShift: boolean) => {
@@ -655,7 +686,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       />
 
       {/* 3. ANA GRID YÜZEYİ (CANVAS + SANAL SCROLLBAR + DOM OVERLAYS) */}
-      <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+      <div ref={gridSurfaceRef} style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
         {/* Fiziksel Canvas */}
         <canvas
           ref={canvasRef}
@@ -664,6 +695,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
             inset: 0,
             width: '100%',
             height: '100%',
+            display: 'block',
             pointerEvents: 'none',
             zIndex: 10,
           }}

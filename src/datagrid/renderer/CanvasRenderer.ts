@@ -42,22 +42,30 @@ export class CanvasRenderer {
     if (!ctx) return;
 
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.round(rect.width) || canvas.clientWidth || 0;
+    const height = Math.round(rect.height) || canvas.clientHeight || 0;
 
-    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
+    if (width <= 0 || height <= 0) return;
+
+    const targetPixelWidth = Math.round(width * dpr);
+    const targetPixelHeight = Math.round(height * dpr);
+
+    if (canvas.width !== targetPixelWidth || canvas.height !== targetPixelHeight) {
+      canvas.width = targetPixelWidth;
+      canvas.height = targetPixelHeight;
     }
 
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    // 1. Zemin Temizleme
-    ctx.fillStyle = theme.canvas.bg;
-    ctx.fillRect(0, 0, width, height);
+    try {
+      // 1. Zemin Temizleme
+      ctx.fillStyle = theme.canvas.bg;
+      ctx.fillRect(0, 0, width, height);
 
-    const rowCount = store.getRowCount();
+      const rowCount = store.getRowCount();
     const rowH = geometry.rowHeight;
     const headerH = geometry.headerHeight;
     const rowNumW = geometry.rowNumberWidth;
@@ -265,8 +273,9 @@ export class CanvasRenderer {
     // SÜTUN BAŞLIKLARI (HEADER ROW - EN ÜSTTE SABİT)
     // ========================================================================
     this.renderHeaders(ctx, geometry, theme, scrollLeft, width, headerH, rowNumW, sortRules);
-
-    ctx.restore();
+    } finally {
+      ctx.restore();
+    }
   }
 
   private static renderHeaders(
