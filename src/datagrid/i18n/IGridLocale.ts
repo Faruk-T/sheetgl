@@ -19,6 +19,7 @@ export interface IGridLocale {
   selectAll: string;
   clear: string;
   apply: string;
+  cancel?: string;
   loading: string;
   noMatches: string;
 

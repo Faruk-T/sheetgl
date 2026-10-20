@@ -18,6 +18,7 @@ export const trTR: IGridLocale = {
   selectAll: '(Tümünü Seç)',
   clear: 'Temizle',
   apply: 'Uygula',
+  cancel: 'İptal',
   loading: 'Yükleniyor...',
   noMatches: 'Kayıt bulunamadı',
 

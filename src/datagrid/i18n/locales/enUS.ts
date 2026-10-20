@@ -18,6 +18,7 @@ export const enUS: IGridLocale = {
   selectAll: '(Select All)',
   clear: 'Clear',
   apply: 'Apply',
+  cancel: 'Cancel',
   loading: 'Loading...',
   noMatches: 'No matching records',
 
