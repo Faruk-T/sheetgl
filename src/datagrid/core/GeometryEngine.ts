@@ -1,4 +1,5 @@
 import { ColumnDef } from '../types/grid';
+import { SelectionModel } from './SelectionModel';
 
 export interface HitTestResult {
   row: number;
@@ -7,6 +8,14 @@ export interface HitTestResult {
   localY: number;
   isFrozen: boolean;
   cellRect: { x: number; y: number; width: number; height: number };
+}
+
+export interface HeaderHitTestResult {
+  colIndex: number;
+  column: ColumnDef;
+  headerX: number;
+  headerWidth: number;
+  isFilterIconHit: boolean;
 }
 
 export class GeometryEngine {
@@ -28,7 +37,11 @@ export class GeometryEngine {
   }
 
   public setColumns(columns: ColumnDef[]): void {
-    this.columns = columns;
+    const visibleCols = columns.filter((c) => c.visible !== false);
+    this.columns = [
+      ...visibleCols.filter((c) => Boolean(c.pinned)),
+      ...visibleCols.filter((c) => !c.pinned),
+    ];
     this.recalculateGeometry();
   }
 
@@ -49,7 +62,6 @@ export class GeometryEngine {
     this.totalScrollableWidth = acc;
   }
 
-  // O(log N) Binary Search ile verilen X pikselinin hangi scrollable sütuna denk geldiğini bulur
   public findScrollableColIndexAtX(scrollX: number): number {
     let low = 0;
     let high = this.scrollableColumns.length - 1;
@@ -68,7 +80,6 @@ export class GeometryEngine {
     return Math.min(Math.max(0, low), Math.max(0, this.scrollableColumns.length - 1));
   }
 
-  // Genel sütun indeksinden (0..columns.length-1) ekrandaki X koordinatını hesaplar
   public getColumnScreenRect(
     colIndex: number,
     scrollLeft: number
@@ -79,7 +90,11 @@ export class GeometryEngine {
       for (let i = 0; i < colIndex; i++) {
         x += this.frozenColumns[i].width;
       }
-      return { x, width: this.frozenColumns[colIndex].width, isFrozen: true };
+      return {
+        x,
+        width: this.frozenColumns[colIndex]?.width || 0,
+        isFrozen: true,
+      };
     } else {
       const scrollIdx = colIndex - frozenCount;
       if (scrollIdx < 0 || scrollIdx >= this.scrollableColumns.length) {
@@ -94,7 +109,108 @@ export class GeometryEngine {
     }
   }
 
-  // Ekrandaki (canvasX, canvasY) koordinatının hangi hücreye denk geldiğini bulur
+  public hitTestHeader(canvasX: number, canvasY: number, scrollLeft: number): HeaderHitTestResult | null {
+    if (canvasY < 0 || canvasY > this.headerHeight || canvasX <= this.rowNumberWidth) {
+      return null;
+    }
+
+    let clickedCol = -1;
+    let headerX = 0;
+    let headerW = 0;
+
+    // 1. Frozen Columns
+    let curX = this.rowNumberWidth;
+    for (let i = 0; i < this.frozenColumns.length; i++) {
+      const w = this.frozenColumns[i].width;
+      if (canvasX >= curX && canvasX < curX + w) {
+        clickedCol = i;
+        headerX = curX;
+        headerW = w;
+        break;
+      }
+      curX += w;
+    }
+
+    // 2. Scrollable Columns
+    if (clickedCol === -1 && canvasX >= this.totalFrozenWidth) {
+      const sx = canvasX - this.totalFrozenWidth + scrollLeft;
+      if (sx >= 0 && sx < this.totalScrollableWidth && this.scrollableColumns.length > 0) {
+        const sIdx = this.findScrollableColIndexAtX(sx);
+        clickedCol = this.frozenColumns.length + sIdx;
+        headerX = this.totalFrozenWidth + this.scrollableColOffsets[sIdx] - scrollLeft;
+        headerW = this.scrollableColumns[sIdx]?.width || 100;
+      }
+    }
+
+    if (clickedCol === -1 || !this.columns[clickedCol]) {
+      return null;
+    }
+
+    const colDef = this.columns[clickedCol];
+    const isFilterable = colDef.filterable !== false && colDef.type !== 'sparkline' && colDef.type !== 'action';
+    const isFilterIconHit = isFilterable && canvasX >= headerX + headerW - 28 && canvasX <= headerX + headerW - 2;
+
+    return {
+      colIndex: clickedCol,
+      column: colDef,
+      headerX,
+      headerWidth: headerW,
+      isFilterIconHit,
+    };
+  }
+
+  public hitTestRowNumber(
+    canvasX: number,
+    canvasY: number,
+    scrollTop: number,
+    rowCount: number
+  ): number | null {
+    if (canvasX < 0 || canvasX > this.rowNumberWidth || canvasY <= this.headerHeight) {
+      return null;
+    }
+    const virtualY = canvasY - this.headerHeight + scrollTop;
+    const row = Math.floor(virtualY / this.rowHeight);
+    if (row < 0 || row >= rowCount) return null;
+    return row;
+  }
+
+  public hitTestFillHandle(
+    canvasX: number,
+    canvasY: number,
+    scrollLeft: number,
+    scrollTop: number,
+    selection: SelectionModel
+  ): 'corner' | 'right-duplicate' | null {
+    if (canvasY <= this.headerHeight || canvasX <= this.rowNumberWidth) return null;
+
+    const norm = selection.getNormalizedRange();
+    const rTopY = this.headerHeight + norm.minRow * this.rowHeight - scrollTop;
+    const rHeight = (norm.maxRow - norm.minRow + 1) * this.rowHeight;
+    const leftColRect = this.getColumnScreenRect(norm.minCol, scrollLeft);
+    const rightColRect = this.getColumnScreenRect(norm.maxCol, scrollLeft);
+
+    if (!leftColRect || !rightColRect) return null;
+
+    const rLeftX = leftColRect.x;
+    const rWidth = rightColRect.x + rightColRect.width - leftColRect.x;
+
+    // 1. Bottom-right corner fill handle (12x12 hit box)
+    const fhX = rLeftX + rWidth;
+    const fhY = rTopY + rHeight;
+    if (Math.abs(canvasX - fhX) <= 7 && Math.abs(canvasY - fhY) <= 7) {
+      return 'corner';
+    }
+
+    // 2. Right-side quick duplicate button handle (centered vertically on right edge of selection)
+    const dupX = rLeftX + rWidth;
+    const dupY = rTopY + rHeight / 2;
+    if (Math.abs(canvasX - dupX) <= 9 && Math.abs(canvasY - dupY) <= 9) {
+      return 'right-duplicate';
+    }
+
+    return null;
+  }
+
   public hitTest(
     canvasX: number,
     canvasY: number,
@@ -113,7 +229,7 @@ export class GeometryEngine {
     const cellScreenY = this.headerHeight + row * this.rowHeight - scrollTop;
     const localY = canvasY - cellScreenY;
 
-    // 1. Frozen Sütunlar
+    // 1. Frozen Columns
     if (canvasX < this.totalFrozenWidth) {
       let curX = this.rowNumberWidth;
       for (let i = 0; i < this.frozenColumns.length; i++) {
@@ -133,9 +249,11 @@ export class GeometryEngine {
       return null;
     }
 
-    // 2. Scrollable Sütunlar
+    // 2. Scrollable Columns
     const scrollX = canvasX - this.totalFrozenWidth + scrollLeft;
-    if (scrollX < 0 || scrollX >= this.totalScrollableWidth) return null;
+    if (scrollX < 0 || scrollX >= this.totalScrollableWidth || this.scrollableColumns.length === 0) {
+      return null;
+    }
 
     const scrollIdx = this.findScrollableColIndexAtX(scrollX);
     const colIndex = this.frozenColumns.length + scrollIdx;
@@ -152,29 +270,26 @@ export class GeometryEngine {
     };
   }
 
-  // Başlıkta sütun resize sınırına (sağ kenar ±4px) denk gelip gelmediğini kontrol eder
   public hitTestColumnResize(
     canvasX: number,
     canvasY: number,
     scrollLeft: number
   ): { colIndex: number; isFrozen: boolean } | null {
-    if (canvasY > this.headerHeight) return null;
+    if (canvasY > this.headerHeight || canvasY < 0) return null;
 
-    // 1. Frozen sütun sınırları
     let curX = this.rowNumberWidth;
     for (let i = 0; i < this.frozenColumns.length; i++) {
       curX += this.frozenColumns[i].width;
-      if (Math.abs(canvasX - curX) <= 5) {
+      if (Math.abs(canvasX - curX) <= 4) {
         return { colIndex: i, isFrozen: true };
       }
     }
 
-    // 2. Scrollable sütun sınırları
     if (canvasX >= this.totalFrozenWidth) {
       for (let i = 0; i < this.scrollableColumns.length; i++) {
         const borderX =
           this.totalFrozenWidth + this.scrollableColOffsets[i + 1] - scrollLeft;
-        if (Math.abs(canvasX - borderX) <= 5) {
+        if (Math.abs(canvasX - borderX) <= 4) {
           return { colIndex: this.frozenColumns.length + i, isFrozen: false };
         }
       }

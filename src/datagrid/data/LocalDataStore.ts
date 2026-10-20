@@ -1,22 +1,24 @@
 import { IDataStore, BatchChanges } from '../types/store';
 import { FilterDescriptor, SortDescriptor, DistinctItem } from '../types/filter';
-import { GroupDescriptor, VirtualRow } from '../types/group';
-import { FilterEngine } from '../core/FilterEngine';
+import { GroupDescriptor, SummaryType, VirtualRow } from '../types/group';
+import { FilterEngine, BLANK_FILTER_TOKEN } from '../core/FilterEngine';
 import { SortEngine } from '../core/SortEngine';
 import { GroupingEngine } from '../core/GroupingEngine';
 
 export interface LocalDataStoreOptions {
   data: any[];
   keyField?: string;
+  batchMode?: boolean;
+  initialSummaries?: Record<string, SummaryType>;
 }
 
 export class LocalDataStore implements IDataStore {
   private rawData: any[] = [];
   private keyField: string;
 
-  // Filtrelenmiş & Sıralanmış ham veri referansları
+  // Filtered & sorted data
   private processedData: any[] = [];
-  // Gruplanmış sanal satırlar (VirtualRow[])
+  // Projected virtual rows (data + group headers)
   private virtualRows: VirtualRow[] = [];
 
   private currentFilter: FilterDescriptor | null = null;
@@ -25,10 +27,24 @@ export class LocalDataStore implements IDataStore {
   private currentGroups: GroupDescriptor[] = [];
   private expandedGroupKeys = new Set<string>();
 
+  // Configurable summary types per column
+  private summaryTypes: Record<string, SummaryType> = {};
+
+  // Batch / Dirty tracking
+  private batchMode: boolean = true;
+  private originalRowSnapshots = new Map<any, Record<string, any>>();
+  private dirtyCells = new Map<any, Set<string>>();
+  private insertedKeys = new Set<any>();
+  private deletedRows = new Map<any, { data: Record<string, any>; index: number }>();
+
   private listeners = new Map<string, Set<(...args: any[]) => void>>();
 
   constructor(options: LocalDataStoreOptions) {
     this.keyField = options.keyField || 'id';
+    this.batchMode = options.batchMode ?? true;
+    if (options.initialSummaries) {
+      this.summaryTypes = { ...options.initialSummaries };
+    }
     this.setData(options.data || []);
   }
 
@@ -40,8 +56,29 @@ export class LocalDataStore implements IDataStore {
     this.rawData = data.map((item, idx) => ({
       ...item,
       __rawIndex: idx,
-      [this.keyField]: item[this.keyField] ?? idx,
+      [this.keyField]: item[this.keyField] ?? idx + 1,
     }));
+
+    // Auto-initialize default summary types if empty
+    if (Object.keys(this.summaryTypes).length === 0 && this.rawData.length > 0) {
+      const sample = this.rawData[0];
+      for (const key of Object.keys(sample)) {
+        if (key === this.keyField || key.startsWith('__')) continue;
+        if (typeof sample[key] === 'number') {
+          if (key === 'rating' || key === 'progress') {
+            this.summaryTypes[key] = 'avg';
+          } else {
+            this.summaryTypes[key] = 'sum';
+          }
+        }
+      }
+    }
+
+    this.originalRowSnapshots.clear();
+    this.dirtyCells.clear();
+    this.insertedKeys.clear();
+    this.deletedRows.clear();
+
     this.recompute();
   }
 
@@ -53,8 +90,15 @@ export class LocalDataStore implements IDataStore {
     return this.virtualRows[rowIndex];
   }
 
+  public getRawData(): any[] {
+    return this.rawData;
+  }
+
+  public getRawRowByKey(rowKey: any): Record<string, any> | undefined {
+    return this.rawData.find((r) => r[this.keyField] === rowKey);
+  }
+
   public async ensureRange(_startRow: number, _endRow: number): Promise<void> {
-    // In-memory olduğu için veri zaten hazırdır
     return Promise.resolve();
   }
 
@@ -78,8 +122,12 @@ export class LocalDataStore implements IDataStore {
 
   public async setGrouping(groupDescriptors: GroupDescriptor[]): Promise<void> {
     this.currentGroups = groupDescriptors;
-    // Varsayılan olarak ilk seviyedeki grupları açık yap
     this.expandedGroupKeys.clear();
+    // Auto-expand first level groups so user sees grouped rows right away
+    if (groupDescriptors.length > 0) {
+      const firstLevelKeys = GroupingEngine.collectGroupKeys(this.processedData, groupDescriptors, 0);
+      firstLevelKeys.forEach((k) => this.expandedGroupKeys.add(k));
+    }
     this.recompute();
     return Promise.resolve();
   }
@@ -94,13 +142,331 @@ export class LocalDataStore implements IDataStore {
     return Promise.resolve();
   }
 
+  public expandAllGroups(): void {
+    const allKeys = GroupingEngine.collectGroupKeys(
+      this.processedData,
+      this.currentGroups,
+      this.currentGroups.length
+    );
+    this.expandedGroupKeys = allKeys;
+    this.recomputeVirtualRowsOnly();
+  }
+
+  public collapseAllGroups(): void {
+    this.expandedGroupKeys.clear();
+    this.recomputeVirtualRowsOnly();
+  }
+
+  private ensureSnapshot(rowKey: any, item: Record<string, any>): void {
+    if (!this.originalRowSnapshots.has(rowKey) && !this.insertedKeys.has(rowKey)) {
+      this.originalRowSnapshots.set(rowKey, { ...item });
+    }
+  }
+
+  private markCellDirty(rowKey: any, columnId: string, newValue: any): void {
+    if (this.insertedKeys.has(rowKey)) return;
+    const orig = this.originalRowSnapshots.get(rowKey);
+    let set = this.dirtyCells.get(rowKey);
+    if (!set) {
+      set = new Set<string>();
+      this.dirtyCells.set(rowKey, set);
+    }
+    if (orig && orig[columnId] === newValue) {
+      set.delete(columnId);
+      if (set.size === 0) {
+        this.dirtyCells.delete(rowKey);
+      }
+    } else {
+      set.add(columnId);
+    }
+  }
+
   public async setCell(rowKey: any, columnId: string, value: any): Promise<void> {
     const item = this.rawData.find((r) => r[this.keyField] === rowKey);
     if (item) {
+      if (item[columnId] === value) return Promise.resolve();
+      if (this.batchMode) {
+        this.ensureSnapshot(rowKey, item);
+        this.markCellDirty(rowKey, columnId, value);
+      }
       item[columnId] = value;
       this.recompute();
     }
     return Promise.resolve();
+  }
+
+  public async setCellsBatch(
+    updates: Array<{ rowKey: any; columnId: string; value: any }>
+  ): Promise<void> {
+    if (!updates || updates.length === 0) return Promise.resolve();
+    const rowMap = new Map<any, Record<string, any>>();
+    for (const r of this.rawData) {
+      rowMap.set(r[this.keyField], r);
+    }
+
+    let changed = false;
+    for (const u of updates) {
+      const item = rowMap.get(u.rowKey);
+      if (item && item[u.columnId] !== u.value) {
+        if (this.batchMode) {
+          this.ensureSnapshot(u.rowKey, item);
+          this.markCellDirty(u.rowKey, u.columnId, u.value);
+        }
+        item[u.columnId] = u.value;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.recompute();
+    }
+    return Promise.resolve();
+  }
+
+  public async updateRowFields(rowKey: any, patch: Record<string, any>): Promise<void> {
+    const item = this.rawData.find((r) => r[this.keyField] === rowKey);
+    if (item) {
+      for (const [colId, val] of Object.entries(patch)) {
+        if (colId === this.keyField || colId.startsWith('__')) continue;
+        if (this.batchMode) {
+          this.ensureSnapshot(rowKey, item);
+          this.markCellDirty(rowKey, colId, val);
+        }
+        item[colId] = val;
+      }
+      this.recompute();
+    }
+    return Promise.resolve();
+  }
+
+  private generateNextKey(): any {
+    let maxId = 0;
+    for (const r of this.rawData) {
+      const k = Number(r[this.keyField]);
+      if (!isNaN(k) && k > maxId) maxId = k;
+    }
+    return maxId > 0 ? maxId + 1 : Date.now();
+  }
+
+  public async insertRow(
+    rowData: Record<string, any>,
+    targetViewRowIndex?: number
+  ): Promise<Record<string, any>> {
+    const newKey = rowData[this.keyField] ?? this.generateNextKey();
+    const newRow: Record<string, any> = {
+      ...rowData,
+      [this.keyField]: newKey,
+      __rawIndex: this.rawData.length,
+    };
+
+    let insertIdx = 0; // Default at top so user immediately sees newly added row
+    if (targetViewRowIndex !== undefined && targetViewRowIndex >= 0) {
+      const vRow = this.virtualRows[targetViewRowIndex];
+      if (vRow && vRow.type === 'data') {
+        const rawIdx = this.rawData.findIndex(
+          (r) => r[this.keyField] === vRow.data[this.keyField]
+        );
+        if (rawIdx !== -1) {
+          insertIdx = rawIdx + 1;
+        }
+      } else if (targetViewRowIndex >= this.virtualRows.length) {
+        insertIdx = this.rawData.length;
+      }
+    }
+
+    this.rawData.splice(insertIdx, 0, newRow);
+    // Reindex __rawIndex
+    for (let i = 0; i < this.rawData.length; i++) {
+      this.rawData[i].__rawIndex = i;
+    }
+
+    if (this.batchMode) {
+      this.insertedKeys.add(newKey);
+    }
+
+    this.recompute();
+    return Promise.resolve(newRow);
+  }
+
+  public async duplicateRow(
+    rowKey: any,
+    targetViewRowIndex?: number
+  ): Promise<Record<string, any> | null> {
+    const sourceIdx = this.rawData.findIndex((r) => r[this.keyField] === rowKey);
+    if (sourceIdx === -1) return Promise.resolve(null);
+
+    const source = this.rawData[sourceIdx];
+    const newKey = this.generateNextKey();
+
+    // Deep clone arrays/objects inside row (like sparkline)
+    const cloned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(source)) {
+      if (Array.isArray(v)) cloned[k] = [...v];
+      else if (v && typeof v === 'object') cloned[k] = { ...v };
+      else cloned[k] = v;
+    }
+
+    cloned[this.keyField] = newKey;
+    if (typeof cloned.code === 'string' && cloned.code.startsWith('ACC-')) {
+      cloned.code = `ACC-${100000 + Number(newKey)}`;
+    }
+
+    const insertIdx =
+      targetViewRowIndex !== undefined ? sourceIdx + 1 : sourceIdx + 1;
+    this.rawData.splice(insertIdx, 0, cloned);
+
+    for (let i = 0; i < this.rawData.length; i++) {
+      this.rawData[i].__rawIndex = i;
+    }
+
+    if (this.batchMode) {
+      this.insertedKeys.add(newKey);
+    }
+
+    this.recompute();
+    return Promise.resolve(cloned);
+  }
+
+  public async deleteRow(rowKey: any): Promise<void> {
+    const idx = this.rawData.findIndex((r) => r[this.keyField] === rowKey);
+    if (idx === -1) return Promise.resolve();
+
+    const [removed] = this.rawData.splice(idx, 1);
+    if (this.batchMode) {
+      if (this.insertedKeys.has(rowKey)) {
+        this.insertedKeys.delete(rowKey);
+      } else {
+        const origData = this.originalRowSnapshots.get(rowKey) || removed;
+        this.deletedRows.set(rowKey, { data: { ...origData }, index: idx });
+      }
+      this.dirtyCells.delete(rowKey);
+    }
+
+    for (let i = 0; i < this.rawData.length; i++) {
+      this.rawData[i].__rawIndex = i;
+    }
+
+    this.recompute();
+    return Promise.resolve();
+  }
+
+  public async restoreRow(rowData: Record<string, any>, rawIndex?: number): Promise<void> {
+    const key = rowData[this.keyField];
+    const existingIdx = this.rawData.findIndex((r) => r[this.keyField] === key);
+    if (existingIdx !== -1) return Promise.resolve();
+
+    const targetIdx =
+      rawIndex !== undefined ? Math.min(Math.max(0, rawIndex), this.rawData.length) : 0;
+    this.rawData.splice(targetIdx, 0, { ...rowData });
+    this.deletedRows.delete(key);
+
+    for (let i = 0; i < this.rawData.length; i++) {
+      this.rawData[i].__rawIndex = i;
+    }
+
+    this.recompute();
+    return Promise.resolve();
+  }
+
+  // ============================================================================
+  // BATCH MODE & DIRTY STATE METHODS
+  // ============================================================================
+  public setBatchMode(enabled: boolean): void {
+    this.batchMode = enabled;
+  }
+
+  public isBatchMode(): boolean {
+    return this.batchMode;
+  }
+
+  public isCellDirty(rowKey: any, columnId: string): boolean {
+    return this.dirtyCells.get(rowKey)?.has(columnId) ?? false;
+  }
+
+  public isRowInserted(rowKey: any): boolean {
+    return this.insertedKeys.has(rowKey);
+  }
+
+  public hasPendingChanges(): boolean {
+    return (
+      this.insertedKeys.size > 0 ||
+      this.dirtyCells.size > 0 ||
+      this.deletedRows.size > 0
+    );
+  }
+
+  public getPendingChanges(): BatchChanges {
+    const inserted: any[] = [];
+    for (const key of this.insertedKeys) {
+      const row = this.rawData.find((r) => r[this.keyField] === key);
+      if (row) {
+        const clean = { ...row };
+        delete clean.__rawIndex;
+        inserted.push(clean);
+      }
+    }
+
+    const updated: Array<{ key: any; values: Record<string, any> }> = [];
+    for (const [key, cols] of this.dirtyCells.entries()) {
+      if (cols.size === 0 || this.insertedKeys.has(key)) continue;
+      const row = this.rawData.find((r) => r[this.keyField] === key);
+      if (row) {
+        const values: Record<string, any> = {};
+        for (const c of cols) {
+          values[c] = row[c];
+        }
+        updated.push({ key, values });
+      }
+    }
+
+    const deleted = Array.from(this.deletedRows.keys());
+
+    return { inserted, updated, deleted };
+  }
+
+  public async saveBatchChanges(): Promise<BatchChanges> {
+    const changes = this.getPendingChanges();
+    this.originalRowSnapshots.clear();
+    this.dirtyCells.clear();
+    this.insertedKeys.clear();
+    this.deletedRows.clear();
+    this.emit('loaded');
+    return Promise.resolve(changes);
+  }
+
+  public discardBatchChanges(): void {
+    // 1. Remove uncommitted inserted rows
+    if (this.insertedKeys.size > 0) {
+      this.rawData = this.rawData.filter((r) => !this.insertedKeys.has(r[this.keyField]));
+    }
+
+    // 2. Restore deleted rows
+    if (this.deletedRows.size > 0) {
+      const entries = Array.from(this.deletedRows.values()).sort((a, b) => a.index - b.index);
+      for (const entry of entries) {
+        const idx = Math.min(entry.index, this.rawData.length);
+        this.rawData.splice(idx, 0, { ...entry.data });
+      }
+    }
+
+    // 3. Revert modified cells to original snapshots
+    for (const [key, orig] of this.originalRowSnapshots.entries()) {
+      const row = this.rawData.find((r) => r[this.keyField] === key);
+      if (row) {
+        Object.assign(row, orig);
+      }
+    }
+
+    for (let i = 0; i < this.rawData.length; i++) {
+      this.rawData[i].__rawIndex = i;
+    }
+
+    this.originalRowSnapshots.clear();
+    this.dirtyCells.clear();
+    this.insertedKeys.clear();
+    this.deletedRows.clear();
+
+    this.recompute();
   }
 
   public async commitBatch(changes: BatchChanges): Promise<void> {
@@ -112,10 +478,10 @@ export class LocalDataStore implements IDataStore {
     }
     if (changes.inserted) {
       for (const ins of changes.inserted) {
-        this.rawData.push({
+        this.rawData.unshift({
           ...ins,
-          __rawIndex: this.rawData.length,
-          [this.keyField]: ins[this.keyField] ?? `temp_${Date.now()}_${Math.random()}`,
+          __rawIndex: 0,
+          [this.keyField]: ins[this.keyField] ?? this.generateNextKey(),
         });
       }
     }
@@ -123,15 +489,23 @@ export class LocalDataStore implements IDataStore {
       const delKeys = new Set(changes.deleted);
       this.rawData = this.rawData.filter((r) => !delKeys.has(r[this.keyField]));
     }
+    this.originalRowSnapshots.clear();
+    this.dirtyCells.clear();
+    this.insertedKeys.clear();
+    this.deletedRows.clear();
     this.recompute();
     return Promise.resolve();
   }
 
   public async getDistinctValues(columnId: string, search?: string): Promise<DistinctItem[]> {
     const counts = new Map<any, number>();
+    let blankCount = 0;
+
     for (let i = 0; i < this.rawData.length; i++) {
       const val = this.rawData[i][columnId];
-      if (val !== undefined && val !== null && val !== '') {
+      if (val === undefined || val === null || val === '') {
+        blankCount++;
+      } else {
         counts.set(val, (counts.get(val) || 0) + 1);
       }
     }
@@ -142,31 +516,84 @@ export class LocalDataStore implements IDataStore {
       count,
     }));
 
+    items.sort((a, b) => SortEngine.compareValues(a.value, b.value));
+
+    if (blankCount > 0) {
+      items.unshift({
+        value: BLANK_FILTER_TOKEN,
+        label: '(Blank)',
+        count: blankCount,
+      });
+    }
+
     if (search) {
       const s = search.toLowerCase();
       items = items.filter((it) => it.label.toLowerCase().includes(s));
     }
 
-    items.sort((a, b) => (b.count || 0) - (a.count || 0));
     return Promise.resolve(items);
   }
 
-  public getSummaries(): Record<string, number> | undefined {
-    // Sadece filtrelenmiş verinin toplamları
-    if (this.processedData.length === 0) return undefined;
-    const sums: Record<string, number> = {};
-    const sample = this.processedData[0];
+  // ============================================================================
+  // DYNAMIC SUMMARY ENGINE
+  // ============================================================================
+  public getSummaryTypes(): Record<string, SummaryType> {
+    return { ...this.summaryTypes };
+  }
 
-    for (const key of Object.keys(sample)) {
-      if (typeof sample[key] === 'number') {
-        let sum = 0;
+  public setSummaryType(columnId: string, summaryType: SummaryType): void {
+    if (summaryType === 'none') {
+      delete this.summaryTypes[columnId];
+    } else {
+      this.summaryTypes[columnId] = summaryType;
+    }
+    this.recomputeVirtualRowsOnly();
+  }
+
+  public getSummaries(): Record<string, number> | undefined {
+    if (this.processedData.length === 0) return undefined;
+    const result: Record<string, number> = {};
+
+    for (const [colId, sType] of Object.entries(this.summaryTypes)) {
+      if (!sType || sType === 'none') continue;
+
+      if (sType === 'count') {
+        let nonNullCount = 0;
         for (let i = 0; i < this.processedData.length; i++) {
-          sum += Number(this.processedData[i][key]) || 0;
+          const v = this.processedData[i][colId];
+          if (v !== null && v !== undefined && v !== '') nonNullCount++;
         }
-        sums[key] = sum;
+        result[colId] = nonNullCount;
+        continue;
+      }
+
+      let sum = 0;
+      let count = 0;
+      let min = Infinity;
+      let max = -Infinity;
+
+      for (let i = 0; i < this.processedData.length; i++) {
+        const raw = this.processedData[i][colId];
+        const num = Number(raw);
+        if (raw !== null && raw !== undefined && raw !== '' && !isNaN(num)) {
+          sum += num;
+          count++;
+          if (num < min) min = num;
+          if (num > max) max = num;
+        }
+      }
+
+      if (count > 0) {
+        if (sType === 'sum') result[colId] = sum;
+        else if (sType === 'avg') result[colId] = sum / count;
+        else if (sType === 'min') result[colId] = min;
+        else if (sType === 'max') result[colId] = max;
+      } else {
+        result[colId] = 0;
       }
     }
-    return sums;
+
+    return result;
   }
 
   public on(event: string, callback: (...args: any[]) => void): void {
@@ -187,18 +614,18 @@ export class LocalDataStore implements IDataStore {
   private recompute(): void {
     this.emit('loading');
 
-    // 1. Filtreleme
+    // 1. Filter
     let filtered = this.rawData;
     if (this.currentFilter) {
       filtered = filtered.filter((row) => FilterEngine.evaluateRow(row, this.currentFilter));
     }
 
-    // 2. Global Arama
+    // 2. Global Search
     if (this.currentSearch) {
       filtered = filtered.filter((row) => FilterEngine.matchSearch(row, this.currentSearch));
     }
 
-    // 3. Sıralama
+    // 3. Multi-Sort
     if (this.currentSort.length > 0) {
       const cmp = SortEngine.createComparator(this.currentSort);
       filtered = [...filtered].sort(cmp);
@@ -206,17 +633,16 @@ export class LocalDataStore implements IDataStore {
 
     this.processedData = filtered;
 
-    // 4. Gruplama ve Sanal Satır Projeksiyonu
+    // 4. Grouping & Virtual Row Projection
     this.recomputeVirtualRowsOnly();
-
-    this.emit('loaded');
   }
 
   private recomputeVirtualRowsOnly(): void {
     this.virtualRows = GroupingEngine.projectVirtualRows(
       this.processedData,
       this.currentGroups,
-      this.expandedGroupKeys
+      this.expandedGroupKeys,
+      this.summaryTypes
     );
     this.emit('loaded');
   }

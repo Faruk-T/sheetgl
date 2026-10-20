@@ -1,14 +1,45 @@
-import { GroupDescriptor, VirtualRow } from '../types/group';
+import { GroupDescriptor, SummaryType, VirtualRow } from '../types/group';
 
 export class GroupingEngine {
+  public static collectGroupKeys(
+    data: any[],
+    groups: GroupDescriptor[],
+    maxAutoExpandLevel: number = 0
+  ): Set<string> {
+    const keys = new Set<string>();
+    if (!groups || groups.length === 0) return keys;
+
+    const visit = (items: any[], level: number, parentKey: string) => {
+      if (level >= groups.length || level > maxAutoExpandLevel) return;
+      const field = groups[level].selector;
+      const buckets = new Map<any, any[]>();
+      for (let i = 0; i < items.length; i++) {
+        const val = items[i][field] ?? '(Blank)';
+        let b = buckets.get(val);
+        if (!b) {
+          b = [];
+          buckets.set(val, b);
+        }
+        b.push(items[i]);
+      }
+      for (const [val, bucketItems] of buckets.entries()) {
+        const groupKey = parentKey ? `${parentKey}|${field}:${val}` : `${field}:${val}`;
+        keys.add(groupKey);
+        visit(bucketItems, level + 1, groupKey);
+      }
+    };
+
+    visit(data, 0, '');
+    return keys;
+  }
+
   public static projectVirtualRows(
     data: any[],
     groups: GroupDescriptor[],
     expandedKeys: Set<string>,
-    summariesFields?: string[]
+    summaryConfig?: Record<string, SummaryType>
   ): VirtualRow[] {
     if (!groups || groups.length === 0) {
-      // Gruplama yoksa düz satırlar
       return data.map((item, rawIndex) => ({
         type: 'data',
         rawIndex,
@@ -17,7 +48,7 @@ export class GroupingEngine {
     }
 
     const result: VirtualRow[] = [];
-    this.groupRecursive(data, groups, 0, '', expandedKeys, result, summariesFields);
+    this.groupRecursive(data, groups, 0, '', expandedKeys, result, summaryConfig);
     return result;
   }
 
@@ -28,10 +59,9 @@ export class GroupingEngine {
     parentKey: string,
     expandedKeys: Set<string>,
     out: VirtualRow[],
-    summariesFields?: string[]
+    summaryConfig?: Record<string, SummaryType>
   ): void {
     if (level >= groups.length) {
-      // En alt seviye yaprak veriler
       for (const item of items) {
         out.push({
           type: 'data',
@@ -45,11 +75,10 @@ export class GroupingEngine {
     const currentGroup = groups[level];
     const field = currentGroup.selector;
 
-    // Satırları gruplara ayır
     const buckets = new Map<any, any[]>();
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const val = item[field] ?? '(Boş)';
+      const val = item[field] ?? '(Blank)';
       let bucket = buckets.get(val);
       if (!bucket) {
         bucket = [];
@@ -58,25 +87,41 @@ export class GroupingEngine {
       bucket.push(item);
     }
 
-    // Her grubu sanal satır olarak ekle
     for (const [val, bucketItems] of buckets.entries()) {
       const groupKey = parentKey ? `${parentKey}|${field}:${val}` : `${field}:${val}`;
       const isExpanded = expandedKeys.has(groupKey);
 
-      // Grup içi toplamları hesapla
       const summaries: Record<string, number> = {};
-      if (summariesFields && summariesFields.length > 0) {
-        for (const sf of summariesFields) {
+      const summaryTypes: Record<string, SummaryType> = {};
+
+      if (summaryConfig) {
+        for (const [sf, sType] of Object.entries(summaryConfig)) {
+          if (!sType || sType === 'none') continue;
+          if (sType === 'count') {
+            summaries[sf] = bucketItems.length;
+            summaryTypes[sf] = 'count';
+            continue;
+          }
           let sum = 0;
           let count = 0;
+          let min = Infinity;
+          let max = -Infinity;
           for (const bi of bucketItems) {
             const num = Number(bi[sf]);
             if (!isNaN(num)) {
               sum += num;
               count++;
+              if (num < min) min = num;
+              if (num > max) max = num;
             }
           }
-          summaries[sf] = sum;
+          if (count > 0) {
+            summaryTypes[sf] = sType;
+            if (sType === 'sum') summaries[sf] = sum;
+            else if (sType === 'avg') summaries[sf] = sum / count;
+            else if (sType === 'min') summaries[sf] = min;
+            else if (sType === 'max') summaries[sf] = max;
+          }
         }
       }
 
@@ -89,11 +134,19 @@ export class GroupingEngine {
         rowCount: bucketItems.length,
         isExpanded,
         summaries,
+        summaryTypes,
       });
 
-      // Eğer grup açıksa çocuklarını da ekle
       if (isExpanded) {
-        this.groupRecursive(bucketItems, groups, level + 1, groupKey, expandedKeys, out, summariesFields);
+        this.groupRecursive(
+          bucketItems,
+          groups,
+          level + 1,
+          groupKey,
+          expandedKeys,
+          out,
+          summaryConfig
+        );
       }
     }
   }

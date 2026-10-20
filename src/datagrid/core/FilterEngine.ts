@@ -1,17 +1,17 @@
 import { FilterDescriptor, FilterOperation, SingleFilter } from '../types/filter';
 
+export const BLANK_FILTER_TOKEN = '__SHEETGL_BLANK__';
+
 export class FilterEngine {
   public static evaluateRow(row: Record<string, any>, filter: FilterDescriptor | null): boolean {
     if (!filter || !Array.isArray(filter) || filter.length === 0) {
       return true;
     }
 
-    // Tekil filtre kontrolü: [column, operator, value]
     if (this.isSingleFilter(filter)) {
       return this.evaluateSingleFilter(row, filter as SingleFilter);
     }
 
-    // Bileşik filtre kontrolü: [filter1, "and"|"or", filter2, ...]
     let logicalOp: 'and' | 'or' = 'and';
     let currentResult = true;
 
@@ -33,10 +33,10 @@ export class FilterEngine {
       } else {
         if (logicalOp === 'and') {
           currentResult = currentResult && itemResult;
-          if (!currentResult) return false; // Kısa devre (Short-circuit)
+          if (!currentResult) return false;
         } else {
           currentResult = currentResult || itemResult;
-          if (currentResult) return true; // Kısa devre
+          if (currentResult) return true;
         }
       }
     }
@@ -59,12 +59,33 @@ export class FilterEngine {
   }
 
   public static match(rawVal: any, op: FilterOperation, targetVal: any): boolean {
-    if (op === '=' && (targetVal === null || targetVal === undefined || targetVal === '')) {
-      return rawVal === null || rawVal === undefined || rawVal === '';
+    const isRawBlank = rawVal === null || rawVal === undefined || rawVal === '';
+
+    if (op === 'in') {
+      if (!Array.isArray(targetVal)) return false;
+      if (targetVal.length === 0) return false;
+      if (isRawBlank) {
+        return targetVal.includes(BLANK_FILTER_TOKEN) || targetVal.includes('') || targetVal.includes(null);
+      }
+      const valStr = String(rawVal).toLowerCase();
+      return targetVal.some((t) => t === rawVal || String(t).toLowerCase() === valStr);
     }
 
-    if (rawVal === null || rawVal === undefined) {
-      return op === '<>';
+    if (op === 'notin') {
+      if (!Array.isArray(targetVal)) return true;
+      if (isRawBlank) {
+        return !(targetVal.includes(BLANK_FILTER_TOKEN) || targetVal.includes('') || targetVal.includes(null));
+      }
+      const valStr = String(rawVal).toLowerCase();
+      return !targetVal.some((t) => t === rawVal || String(t).toLowerCase() === valStr);
+    }
+
+    if (op === '=' && (targetVal === null || targetVal === undefined || targetVal === '' || targetVal === BLANK_FILTER_TOKEN)) {
+      return isRawBlank;
+    }
+
+    if (isRawBlank) {
+      return op === '<>' || op === 'notcontains';
     }
 
     const valStr = String(rawVal).toLowerCase();
@@ -80,14 +101,18 @@ export class FilterEngine {
       case 'endswith':
         return valStr.endsWith(targetStr);
       case '=':
-        if (typeof rawVal === 'number' || !isNaN(Number(targetVal))) {
+        if (typeof rawVal === 'number' && targetVal !== '' && !isNaN(Number(targetVal))) {
           return Number(rawVal) === Number(targetVal);
         }
         if (typeof rawVal === 'boolean') {
-          return Boolean(rawVal) === Boolean(targetVal);
+          if (typeof targetVal === 'boolean') return rawVal === targetVal;
+          return String(rawVal).toLowerCase() === targetStr;
         }
         return valStr === targetStr;
       case '<>':
+        if (typeof rawVal === 'number' && targetVal !== '' && !isNaN(Number(targetVal))) {
+          return Number(rawVal) !== Number(targetVal);
+        }
         return valStr !== targetStr;
       case '<':
         return Number(rawVal) < Number(targetVal);
@@ -102,20 +127,11 @@ export class FilterEngine {
         const num = Number(rawVal);
         return num >= Number(min) && num <= Number(max);
       }
-      case 'in': {
-        if (!Array.isArray(targetVal)) return false;
-        return targetVal.some((t) => String(t).toLowerCase() === valStr);
-      }
-      case 'notin': {
-        if (!Array.isArray(targetVal)) return true;
-        return !targetVal.some((t) => String(t).toLowerCase() === valStr);
-      }
       default:
         return true;
     }
   }
 
-  // Global Arama Eşleşmesi
   public static matchSearch(row: Record<string, any>, keyword: string, columns?: string[]): boolean {
     if (!keyword) return true;
     const cleanKeyword = keyword.toLowerCase().trim();
@@ -123,6 +139,7 @@ export class FilterEngine {
 
     const fields = columns && columns.length > 0 ? columns : Object.keys(row);
     for (const f of fields) {
+      if (f.startsWith('__')) continue;
       const val = row[f];
       if (val !== null && val !== undefined) {
         if (String(val).toLowerCase().includes(cleanKeyword)) {
