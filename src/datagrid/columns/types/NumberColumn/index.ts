@@ -8,7 +8,8 @@ export const NumberColumnPlugin: IColumnTypePlugin<number> = {
   editorComponent: NumberEditor,
 
   onKeyDown({ event, openEditor }) {
-    if (/^[0-9.,-]$/.test(event.key)) {
+    if (/^[0-9.,-]$/.test(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
       openEditor(event.key);
       return true;
     }

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CellEditorProps } from '../../IColumnTypePlugin';
-import { SelectOption } from '../../../types/grid';
 
 export const SelectEditor: React.FC<CellEditorProps<string>> = ({
   value,
@@ -14,7 +13,10 @@ export const SelectEditor: React.FC<CellEditorProps<string>> = ({
 }) => {
   const options = column.options || [];
   const [search, setSearch] = useState<string>(initialChar || '');
-  const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(() => {
+    const idx = options.findIndex((o) => o.value === value);
+    return idx >= 0 ? idx : 0;
+  });
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -28,10 +30,21 @@ export const SelectEditor: React.FC<CellEditorProps<string>> = ({
     inputRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onCancel();
+      }
+    };
+    document.addEventListener('mousedown', handleOutside, true);
+    return () => document.removeEventListener('mousedown', handleOutside, true);
+  }, [onCancel]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+      setHighlightedIndex((prev) => Math.min(prev + 1, Math.max(0, filtered.length - 1)));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlightedIndex((prev) => Math.max(prev - 1, 0));
@@ -58,12 +71,15 @@ export const SelectEditor: React.FC<CellEditorProps<string>> = ({
   return (
     <div
       ref={containerRef}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
       style={{
         position: 'absolute',
-        left: rect.x,
+        left: Math.max(4, rect.x),
         top: rect.y,
-        minWidth: Math.max(rect.width, 180),
-        zIndex: 100,
+        minWidth: Math.max(rect.width, 190),
+        zIndex: 120,
         backgroundColor: theme.dom.popoverBg,
         color: theme.dom.popoverText,
         border: `1px solid ${theme.dom.popoverBorder}`,
@@ -94,11 +110,12 @@ export const SelectEditor: React.FC<CellEditorProps<string>> = ({
             outline: 'none',
             fontSize: 12,
             fontFamily: theme.fontFamily,
+            boxSizing: 'border-box',
           }}
         />
       </div>
 
-      <div style={{ maxHeight: 180, overflowY: 'auto', padding: 4 }}>
+      <div style={{ maxHeight: 190, overflowY: 'auto', padding: 4 }}>
         {filtered.length === 0 ? (
           <div style={{ padding: '8px 12px', fontSize: 12, color: '#8E8E93' }}>
             {locale?.noMatches || 'No matching records'}
@@ -110,7 +127,10 @@ export const SelectEditor: React.FC<CellEditorProps<string>> = ({
             return (
               <div
                 key={opt.value}
-                onMouseDown={() => onCommit(opt.value, 'none')}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  onCommit(opt.value, 'none');
+                }}
                 onMouseEnter={() => setHighlightedIndex(i)}
                 style={{
                   display: 'flex',
@@ -135,7 +155,9 @@ export const SelectEditor: React.FC<CellEditorProps<string>> = ({
                         width: 8,
                         height: 8,
                         borderRadius: '50%',
-                        backgroundColor: theme.isDark ? (opt.darkFg || '#60A5FA') : (opt.fg || opt.bg || '#3B82F6'),
+                        backgroundColor: theme.isDark
+                          ? opt.darkFg || '#60A5FA'
+                          : opt.fg || opt.bg || '#3B82F6',
                       }}
                     />
                   )}

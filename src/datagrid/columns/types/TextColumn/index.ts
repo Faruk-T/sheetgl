@@ -10,6 +10,7 @@ export const TextColumnPlugin: IColumnTypePlugin<string> = {
   onKeyDown({ event, openEditor }) {
     // First-key capture: Klavyeden herhangi bir harfe basıldığında editörü doğrudan o harfle aç
     if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
       openEditor(event.key);
       return true;
     }

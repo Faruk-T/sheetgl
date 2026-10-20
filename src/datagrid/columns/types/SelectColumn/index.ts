@@ -9,7 +9,7 @@ export const SelectColumnPlugin: IColumnTypePlugin<string> = {
 
   onPointerDown({ localX, column }) {
     // Sağdaki ok alanına tıklandıysa doğrudan editörü aç
-    if (localX > column.width - 24) {
+    if (localX > column.width - 28) {
       return { handled: true, shouldOpenEditor: true };
     }
     return { handled: false };
@@ -17,10 +17,12 @@ export const SelectColumnPlugin: IColumnTypePlugin<string> = {
 
   onKeyDown({ event, openEditor }) {
     if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
       openEditor(event.key);
       return true;
     }
     if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
       openEditor();
       return true;
     }
@@ -32,7 +34,7 @@ export const SelectColumnPlugin: IColumnTypePlugin<string> = {
     const match = column.options?.find(
       (o) => o.value.toLowerCase() === clean || o.label.toLowerCase() === clean
     );
-    return match ? match.value : text;
+    return match ? match.value : text.trim();
   },
 
   formatClipboard(value, column) {

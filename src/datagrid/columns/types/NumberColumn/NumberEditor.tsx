@@ -11,21 +11,30 @@ export const NumberEditor: React.FC<CellEditorProps<number>> = ({
 }) => {
   const [val, setVal] = useState<string>(initialChar ?? (value != null ? String(value) : ''));
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const committedRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
-      if (!initialChar) inputRef.current.select();
+      if (!initialChar) {
+        inputRef.current.select();
+      } else {
+        const len = inputRef.current.value.length;
+        inputRef.current.setSelectionRange(len, len);
+      }
     }
   }, [initialChar]);
 
   const commitParsed = (moveDir?: 'down' | 'right' | 'left' | 'none') => {
+    if (committedRef.current) return;
+    committedRef.current = true;
     const clean = val.replace(/\s/g, '').replace(',', '.');
     const parsed = parseFloat(clean);
     onCommit(isNaN(parsed) ? 0 : parsed, moveDir);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
       commitParsed(e.shiftKey ? 'none' : 'down');
@@ -34,19 +43,23 @@ export const NumberEditor: React.FC<CellEditorProps<number>> = ({
       commitParsed(e.shiftKey ? 'left' : 'right');
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      committedRef.current = true;
       onCancel();
     }
   };
 
   return (
     <div
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
       style={{
         position: 'absolute',
         left: rect.x,
         top: rect.y,
         width: Math.max(rect.width, 100),
         height: rect.height,
-        zIndex: 50,
+        zIndex: 100,
       }}
     >
       <input
@@ -68,7 +81,8 @@ export const NumberEditor: React.FC<CellEditorProps<number>> = ({
           outline: 'none',
           fontFamily: theme.fontFamily,
           fontSize: `${theme.fontSize}px`,
-          borderRadius: 2,
+          borderRadius: 3,
+          boxShadow: theme.dom.popoverShadow,
         }}
       />
     </div>

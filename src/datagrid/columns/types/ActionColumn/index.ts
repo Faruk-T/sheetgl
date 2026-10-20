@@ -5,18 +5,19 @@ export const ActionColumnPlugin: IColumnTypePlugin<any> = {
   type: 'action',
   paint: paintAction,
 
-  onPointerDown({ column, value }) {
+  onPointerDown({ column, row, rowIndex, value }) {
     if (column.onActionClick) {
-      column.onActionClick(value, 0);
+      column.onActionClick(row ?? value, rowIndex ?? 0);
       return { handled: true };
     }
     return { handled: false };
   },
 
-  onKeyDown({ event, column, value }) {
+  onKeyDown({ event, column, row, rowIndex, value }) {
     if (event.key === 'Enter') {
+      event.preventDefault();
       if (column.onActionClick) {
-        column.onActionClick(value, 0);
+        column.onActionClick(row ?? value, rowIndex ?? 0);
         return true;
       }
     }

@@ -6,6 +6,8 @@ import { IGridLocale } from '../i18n/IGridLocale';
 export interface CellPaintContext<T = any> {
   ctx: CanvasRenderingContext2D;
   value: T;
+  row?: Record<string, any>;
+  rowIndex?: number;
   column: ColumnDef;
   theme: IGridThemeTokens;
   locale: IGridLocale;
@@ -15,6 +17,8 @@ export interface CellPaintContext<T = any> {
   height: number;
   isSelected: boolean;
   isHovered: boolean;
+  isReadonly?: boolean;
+  isDirty?: boolean;
 }
 
 export interface CellHitTestResult {
@@ -24,6 +28,7 @@ export interface CellHitTestResult {
 
 export interface CellEditorProps<T = any> {
   value: T;
+  row?: Record<string, any>;
   column: ColumnDef;
   theme: IGridThemeTokens;
   locale: IGridLocale;
@@ -47,6 +52,8 @@ export interface IColumnTypePlugin<TValue = any> {
     localX: number;
     localY: number;
     value: TValue;
+    row?: Record<string, any>;
+    rowIndex?: number;
     column: ColumnDef;
     setValue: (val: TValue) => void;
   }): CellHitTestResult;
@@ -55,6 +62,8 @@ export interface IColumnTypePlugin<TValue = any> {
   onKeyDown?(params: {
     event: React.KeyboardEvent;
     value: TValue;
+    row?: Record<string, any>;
+    rowIndex?: number;
     column: ColumnDef;
     setValue: (val: TValue) => void;
     openEditor: (char?: string) => void;
