@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "description": "High-performance Canvas-based DataGrid for React combining Google Sheets speed with DevExtreme enterprise features. Zero dependencies, MIT licensed.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/umitunc/sheetgl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/umitunc/sheetgl/issues"
+  },
+  "homepage": "https://github.com/umitunc/sheetgl#readme",
   "keywords": [
     "datagrid",
     "canvas",
