@@ -33,23 +33,49 @@ export interface SelectOption {
   value: string;
   label: string;
   subtitle?: string;
+  icon?: string;
+  color?: string;
+  bgColor?: string;
   bg?: string;
   fg?: string;
   darkBg?: string;
   darkFg?: string;
 }
 
+export type ValidationRuleResult =
+  | boolean
+  | string
+  | void
+  | { valid: boolean; message?: string };
+
+/**
+ * DevExtreme-compatible Deferred object for asynchronous validation rules.
+ * Can be resolved with `true` (valid) or `false` (invalid, uses rule.message),
+ * or rejected with `reject("Custom error message")` / `reject()`.
+ */
+export interface IDeferred<T = ValidationRuleResult> {
+  resolve: (result?: T) => void;
+  reject: (errorMessage?: string | { valid?: boolean; message?: string }) => void;
+  promise: () => Promise<ValidationRuleResult>;
+}
+
 export interface ValidationCallbackParams {
   value: any;
   data: Record<string, any>;
   column: ColumnDef;
+  rule?: ValidationRule;
+  /**
+   * Built-in DevExtreme-style Deferred instance ready to use inside async validationCallback:
+   * `deferred.resolve(true)` / `deferred.resolve(false)` / `deferred.reject("Error")`
+   * and `return deferred.promise()` (or `return deferred`).
+   */
+  deferred: IDeferred<ValidationRuleResult>;
 }
-
-export type ValidationRuleResult = boolean | { valid: boolean; message?: string };
 
 export type ValidationRule =
   | {
       type: 'required';
+      trim?: boolean;
       message?: string;
     }
   | {
@@ -62,6 +88,7 @@ export type ValidationRule =
       type: 'stringLength';
       min?: number;
       max?: number;
+      trim?: boolean;
       message?: string;
     }
   | {
@@ -71,10 +98,12 @@ export type ValidationRule =
     }
   | {
       type: 'email';
+      ignoreEmptyValue?: boolean;
       message?: string;
     }
   | {
       type: 'url';
+      ignoreEmptyValue?: boolean;
       message?: string;
     }
   | {
@@ -92,7 +121,10 @@ export type ValidationRule =
       type: 'async';
       validationCallback: (
         params: ValidationCallbackParams
-      ) => Promise<ValidationRuleResult> | ValidationRuleResult;
+      ) =>
+        | Promise<ValidationRuleResult>
+        | IDeferred<ValidationRuleResult>
+        | ValidationRuleResult;
       message?: string;
     };
 

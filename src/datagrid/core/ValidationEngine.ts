@@ -1,10 +1,55 @@
-import { ColumnDef, ValidationRule, ValidationRuleResult } from '../types/grid';
+import { ColumnDef, IDeferred, ValidationRule, ValidationRuleResult } from '../types/grid';
 import { FilterEngine } from './FilterEngine';
 
 export interface ValidationOutcome {
   valid: boolean;
   message?: string;
   isAsync?: boolean;
+}
+
+/**
+ * DevExtreme-compatible Deferred class for asynchronous backend validation.
+ * Supports:
+ * - `d.resolve(true)` or `d.resolve()` -> Valid
+ * - `d.resolve(false)` -> Invalid (displays rule.message)
+ * - `d.reject("Custom backend error message")` -> Invalid (displays custom message)
+ * - `return d.promise()` or `return d`
+ */
+export class Deferred<T = ValidationRuleResult> implements IDeferred<T> {
+  private _promise: Promise<ValidationRuleResult>;
+  private _resolve!: (val: ValidationRuleResult) => void;
+
+  constructor() {
+    this._promise = new Promise<ValidationRuleResult>((res) => {
+      this._resolve = res;
+    });
+  }
+
+  public resolve = (result?: T): void => {
+    if (result === undefined) {
+      this._resolve(true);
+    } else {
+      this._resolve(result as unknown as ValidationRuleResult);
+    }
+  };
+
+  public reject = (errorMessage?: string | { valid?: boolean; message?: string }): void => {
+    if (typeof errorMessage === 'string' && errorMessage.trim()) {
+      this._resolve({ valid: false, message: errorMessage });
+    } else if (errorMessage && typeof errorMessage === 'object') {
+      this._resolve({ valid: false, message: errorMessage.message });
+    } else {
+      this._resolve(false);
+    }
+  };
+
+  public promise = (): Promise<ValidationRuleResult> => {
+    return this._promise;
+  };
+}
+
+export function createDeferred<T = ValidationRuleResult>(): Deferred<T> {
+  return new Deferred<T>();
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -17,6 +62,9 @@ export class ValidationEngine {
   ): { valid: boolean; message?: string } {
     if (typeof res === 'boolean') {
       return res ? { valid: true } : { valid: false, message: fallbackMsg };
+    }
+    if (typeof res === 'string') {
+      return res.trim() === '' ? { valid: true } : { valid: false, message: res };
     }
     if (res && typeof res === 'object') {
       return {
@@ -234,7 +282,8 @@ export class ValidationEngine {
         const fallback =
           rule.message ||
           (isTR ? `${colTitle}: Doğrulama başarısız!` : `${colTitle}: Validation failed!`);
-        const res = rule.validationCallback({ value, data: row, column });
+        const deferred = new Deferred<ValidationRuleResult>();
+        const res = rule.validationCallback({ value, data: row, column, rule, deferred });
         return this.normalizeResult(res, fallback);
       }
 
@@ -244,11 +293,37 @@ export class ValidationEngine {
           (isTR
             ? `${colTitle}: Asenkron doğrulama başarısız!`
             : `${colTitle}: Async validation failed!`);
-        const res = await rule.validationCallback({ value, data: row, column });
-        return {
-          ...this.normalizeResult(res, fallback),
-          isAsync: true,
-        };
+        const deferred = new Deferred<ValidationRuleResult>();
+        try {
+          const rawReturn = rule.validationCallback({ value, data: row, column, rule, deferred });
+          let resolved: ValidationRuleResult;
+          if (rawReturn && typeof (rawReturn as IDeferred).promise === 'function') {
+            resolved = await (rawReturn as IDeferred).promise();
+          } else if (rawReturn instanceof Promise) {
+            resolved = await rawReturn;
+          } else if (rawReturn === undefined) {
+            // Developer used params.deferred.resolve(...) without returning
+            resolved = await deferred.promise();
+          } else {
+            resolved = rawReturn as ValidationRuleResult;
+          }
+          return {
+            ...this.normalizeResult(resolved, fallback),
+            isAsync: true,
+          };
+        } catch (err: any) {
+          const errMsg =
+            typeof err === 'string' && err.trim()
+              ? err
+              : err && typeof err.message === 'string' && err.message.trim()
+              ? err.message
+              : fallback;
+          return {
+            valid: false,
+            message: errMsg,
+            isAsync: true,
+          };
+        }
       }
 
       default:

@@ -26,6 +26,10 @@ export type {
   ColumnPermission,
   GridPermissions,
   SelectOption,
+  ValidationRule,
+  ValidationCallbackParams,
+  ValidationRuleResult,
+  IDeferred,
   CellCoords,
   CellRange,
   CascadingUpdateContext,
@@ -42,6 +46,7 @@ export type {
   SavedEvent,
   GridEventLogEntry,
 } from './types/grid';
+export { ValidationEngine, Deferred, createDeferred } from './core/ValidationEngine';
 export type { IDataStore, DataGridQuery, LoadResult, RemoteOperationsConfig, BatchChanges } from './types/store';
 export type { FilterDescriptor, SortDescriptor, DistinctItem, FilterOperation, ColumnFilterState } from './types/filter';
 export type { GroupDescriptor, VirtualRow, SummaryDescriptor, SummaryType } from './types/group';

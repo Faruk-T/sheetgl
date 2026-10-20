@@ -376,6 +376,52 @@ export function App() {
         pinned: 'left',
         sortable: true,
         filterable: true,
+        validationRules: [
+          {
+            type: 'required',
+            message: lang === 'tr' ? 'Hesap kodu zorunludur.' : 'Account code is required.',
+          },
+          {
+            type: 'pattern',
+            pattern: /^ACC-\d{6}$/,
+            message:
+              lang === 'tr'
+                ? 'Hesap kodu "ACC-100001" formatında olmalıdır.'
+                : 'Account code must match "ACC-100001" format.',
+          },
+          {
+            type: 'async',
+            message:
+              lang === 'tr'
+                ? 'Bu hesap kodu sistem tarafından rezerve edilmiştir (ACC-000000 / ACC-999999 kullanılamaz)!'
+                : 'This account code is reserved by the system (ACC-000000 / ACC-999999 not allowed)!',
+            validationCallback: ({ value, data: rowData, deferred }) => {
+              pushEventLog(
+                'validationRule (Deferred Async)',
+                `Checking uniqueness & blacklist for code "${value}"...`,
+                'async'
+              );
+              setTimeout(() => {
+                const isValid = value !== 'ACC-000000' && value !== 'ACC-999999';
+                if (isValid) {
+                  pushEventLog(
+                    'validationRule (Deferred -> true)',
+                    `Account code "${value}" verified for row #${rowData.id}.`,
+                    'success'
+                  );
+                } else {
+                  pushEventLog(
+                    'validationRule (Deferred -> false)',
+                    `Account code "${value}" rejected by backend Deferred check!`,
+                    'warning'
+                  );
+                }
+                deferred.resolve(isValid);
+              }, 180);
+              return deferred.promise();
+            },
+          },
+        ],
       },
       {
         id: 'company',
@@ -385,6 +431,21 @@ export function App() {
         pinned: 'left',
         sortable: true,
         filterable: true,
+        validationRules: [
+          {
+            type: 'required',
+            message: lang === 'tr' ? 'Şirket adı boş bırakılamaz.' : 'Company name cannot be empty.',
+          },
+          {
+            type: 'stringLength',
+            min: 3,
+            max: 80,
+            message:
+              lang === 'tr'
+                ? 'Şirket adı en az 3, en fazla 80 karakter olmalıdır.'
+                : 'Company name must be between 3 and 80 characters.',
+          },
+        ],
       },
       {
         id: 'managerId',
@@ -509,6 +570,37 @@ export function App() {
         sortable: true,
         filterable: true,
         summaryType: 'sum',
+        validationRules: [
+          {
+            type: 'required',
+          },
+          {
+            type: 'range',
+            min: 0,
+            max: 10000000,
+            message:
+              lang === 'tr'
+                ? 'Brüt bakiye $0 ile $10,000,000 arasında olmalıdır (negatif olamaz).'
+                : 'Gross balance must be between $0 and $10,000,000 (cannot be negative).',
+          },
+          {
+            type: 'async',
+            validationCallback: async ({ value, data: rowData }) => {
+              const num = Number(value);
+              if (rowData.status === 'rejected' && num > 50000) {
+                await new Promise((r) => setTimeout(r, 150));
+                return {
+                  valid: false,
+                  message:
+                    lang === 'tr'
+                      ? 'Reddedilmiş (Rejected) hesaplarda bakiye $50,000 üstüne çıkarılamaz!'
+                      : 'Rejected accounts cannot exceed $50,000 balance!',
+                };
+              }
+              return true;
+            },
+          },
+        ],
         setCellValue: (newData, newBalance, currentRow) => {
           const tax = Number(currentRow.taxRate) || 0;
           newData.netBalance = Math.round(Number(newBalance) * (1 - tax / 100) * 100) / 100;
@@ -522,6 +614,17 @@ export function App() {
         sortable: true,
         filterable: true,
         summaryType: 'avg',
+        validationRules: [
+          {
+            type: 'range',
+            min: 0,
+            max: 100,
+            message:
+              lang === 'tr'
+                ? 'Vergi oranı %0 ile %100 arasında olmalıdır.'
+                : 'Tax rate must be between 0% and 100%.',
+          },
+        ],
         setCellValue: (newData, newTax, currentRow) => {
           const bal = Number(currentRow.balance) || 0;
           newData.netBalance = Math.round(bal * (1 - Number(newTax) / 100) * 100) / 100;
@@ -608,6 +711,16 @@ export function App() {
         width: 185,
         sortable: true,
         filterable: true,
+        validationRules: [
+          { type: 'required' },
+          {
+            type: 'email',
+            message:
+              lang === 'tr'
+                ? 'Lütfen geçerli bir kurumsal e-posta adresi girin.'
+                : 'Please enter a valid corporate email address.',
+          },
+        ],
       },
       {
         id: 'website',
@@ -616,6 +729,15 @@ export function App() {
         width: 165,
         sortable: true,
         filterable: true,
+        validationRules: [
+          {
+            type: 'url',
+            message:
+              lang === 'tr'
+                ? 'Web sitesi http:// veya https:// ile başlamalıdır.'
+                : 'Website URL must start with http:// or https://.',
+          },
+        ],
       },
       {
         id: 'phone',

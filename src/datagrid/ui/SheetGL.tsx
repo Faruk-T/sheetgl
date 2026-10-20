@@ -23,6 +23,7 @@ import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
 import { GeometryEngine } from '../core/GeometryEngine';
 import { SelectionModel } from '../core/SelectionModel';
 import { HistoryManager } from '../core/HistoryManager';
+import { ValidationEngine } from '../core/ValidationEngine';
 import { CanvasRenderer } from '../renderer/CanvasRenderer';
 import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
@@ -237,6 +238,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   const [selectedCellUI, setSelectedCellUI] = useState<{ row: number; col: number }>({ row: 0, col: 0 });
   const [selectionVersion, setSelectionVersion] = useState<number>(0);
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlayState | null>(null);
+  const [editorValidationError, setEditorValidationError] = useState<string | null>(null);
+  const [isEditorValidating, setIsEditorValidating] = useState<boolean>(false);
   const [headerFilterState, setHeaderFilterState] = useState<{
     column: ColumnDef;
     rect: { x: number; y: number; width: number; height: number };
@@ -463,22 +466,35 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       const rowKey = rowData.id ?? rowIndex;
       const oldValue = rowData[colDef.id];
 
-      if (oldValue === newValue) return true;
+      if (oldValue === newValue) {
+        setEditorValidationError(null);
+        return true;
+      }
       if (!canEditCell(rowData, colDef, rowIndex, false)) return false;
 
-      // 1. Column Validator Check
-      if (colDef.validator) {
-        const rawRes = colDef.validator(newValue, rowData, colDef);
-        const valRes = rawRes instanceof Promise ? await rawRes : rawRes;
-        if (valRes === false || (typeof valRes === 'object' && !valRes.valid)) {
+      // 1. Static & Async Column Validation Rules + Legacy Validator Check
+      const isTR = currentLocale.code.startsWith('tr');
+      const hasAsyncRule =
+        colDef.validationRules?.some((r) => r.type === 'async') || Boolean(colDef.validator);
+      if (hasAsyncRule) {
+        loadingRowKeysRef.current.add(rowKey);
+        requestRender();
+      }
+      try {
+        const valRes = await ValidationEngine.validateCell(newValue, rowData, colDef, isTR);
+        if (!valRes.valid) {
           const msg =
-            typeof valRes === 'object' && valRes.message
-              ? valRes.message
-              : currentLocale.code.startsWith('tr')
-              ? 'Geçersiz hücre değeri!'
-              : 'Invalid cell value!';
-          showToast(`⚠️ ${msg}`, 'warning');
+            valRes.message ||
+            (isTR ? 'Doğrulama kuralı hatası: Giriş engellendi!' : 'Validation rule failed: Entry blocked!');
+          setEditorValidationError(msg);
+          showToast(`⛔ ${msg}`, 'warning');
           return false;
+        }
+        setEditorValidationError(null);
+      } finally {
+        if (hasAsyncRule) {
+          loadingRowKeysRef.current.delete(rowKey);
+          requestRender();
         }
       }
 
@@ -673,12 +689,47 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         return;
       }
 
-      const forwardBatch = allowedUpdates.map((u) => ({
+      // Validate all items against column validationRules & validator
+      const isTR = currentLocale.code.startsWith('tr');
+      const validatedUpdates: typeof allowedUpdates = [];
+      let firstErrorMsg: string | null = null;
+      let rejectedCount = 0;
+
+      for (const u of allowedUpdates) {
+        const valRes = await ValidationEngine.validateCell(u.newValue, u.rowData, u.colDef, isTR);
+        if (valRes.valid) {
+          validatedUpdates.push(u);
+        } else {
+          rejectedCount++;
+          if (!firstErrorMsg) {
+            firstErrorMsg =
+              valRes.message ||
+              (isTR ? 'Doğrulama kuralına uymayan değer engellendi!' : 'Invalid value blocked by validation rule!');
+          }
+        }
+      }
+
+      if (rejectedCount > 0 && firstErrorMsg) {
+        showToast(
+          rejectedCount === 1
+            ? `⛔ ${firstErrorMsg}`
+            : isTR
+            ? `⛔ ${rejectedCount} hücre doğrulama kuralına uymadığı için engellendi (${firstErrorMsg})`
+            : `⛔ ${rejectedCount} cells blocked by validation rule (${firstErrorMsg})`,
+          'warning'
+        );
+      }
+
+      if (validatedUpdates.length === 0) {
+        return;
+      }
+
+      const forwardBatch = validatedUpdates.map((u) => ({
         rowKey: u.rowKey,
         columnId: u.colDef.id,
         value: u.newValue,
       }));
-      const backwardBatch = allowedUpdates.map((u) => ({
+      const backwardBatch = validatedUpdates.map((u) => ({
         rowKey: u.rowKey,
         columnId: u.colDef.id,
         value: u.oldValue,
@@ -693,7 +744,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       }
 
       // Also trigger cascading setCellValue for updated rows if any column defines setCellValue
-      for (const u of allowedUpdates) {
+      for (const u of validatedUpdates) {
         onCellChange?.(u.rowData, u.colDef.id, u.newValue);
         if (u.colDef.setCellValue) {
           const draft: Record<string, any> = {};
@@ -1518,6 +1569,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     const screenRect = geom.getColumnScreenRect(col, scrollPosRef.current.left);
     const y = geom.headerHeight + row * geom.rowHeight - scrollPosRef.current.top;
 
+    setEditorValidationError(null);
+    setIsEditorValidating(false);
     setActiveOverlay({
       row,
       col,
@@ -2696,19 +2749,48 @@ export const SheetGL: React.FC<SheetGLProps> = ({
             overlay={activeOverlay}
             theme={resolvedTheme}
             locale={currentLocale}
-            onCommit={(newVal, moveDir) => {
+            validationError={editorValidationError}
+            isValidating={isEditorValidating}
+            onCommit={async (newVal, moveDir) => {
+              if (isEditorValidating) return;
               const targetRow = activeOverlay.row;
               const targetCol = activeOverlay.column;
-              setActiveOverlay(null);
-              commitSingleCellEdit(targetRow, targetCol, newVal, true).then(() => {
+              const hasAsync =
+                targetCol.validationRules?.some((r) => r.type === 'async') ||
+                Boolean(targetCol.validator);
+
+              if (hasAsync) {
+                setIsEditorValidating(true);
+              }
+              const ok = await commitSingleCellEdit(targetRow, targetCol, newVal, true);
+              if (hasAsync) {
+                setIsEditorValidating(false);
+              }
+
+              if (ok) {
+                setEditorValidationError(null);
+                setActiveOverlay(null);
                 if (moveDir === 'down') moveSelection(1, 0);
                 else if (moveDir === 'right') moveSelection(0, 1);
                 else if (moveDir === 'left') moveSelection(0, -1);
                 else requestRender();
-              });
-              containerRef.current?.focus();
+                containerRef.current?.focus();
+              } else {
+                // Keep editor open with user's attempted value so they can fix the validation error or press Escape
+                setActiveOverlay((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        initialValue: newVal,
+                        initialChar: undefined,
+                      }
+                    : null
+                );
+              }
             }}
             onCancel={() => {
+              setEditorValidationError(null);
+              setIsEditorValidating(false);
               setActiveOverlay(null);
               containerRef.current?.focus();
             }}
