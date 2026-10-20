@@ -1,8 +1,9 @@
 {
   "name": "sheetgl",
-  "version": "1.0.0",
-  "description": "High-performance WebGL & Canvas Excel DataGrid for React with 60 FPS virtualization, batch CRUD, rich plugins, and zero dependencies. MIT licensed.",
+  "version": "2.0.0",
+  "description": "High-performance WebGL & Canvas Excel DataGrid for React with 60 FPS virtualization, 14 column types, DevExtreme-style batch CRUD & cascading triggers, and zero dependencies. MIT licensed.",
   "license": "MIT",
+  "author": "SheetGL Contributors",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/umitunc/sheetgl.git"
@@ -16,6 +17,7 @@
     "webgl-datagrid",
     "canvas-datagrid",
     "excel-datagrid",
+    "devextreme-datagrid",
     "react",
     "spreadsheet",
     "virtualized-grid",
@@ -23,11 +25,43 @@
     "high-performance"
   ],
   "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "sheetgl": "./bin/cli.mjs",
+    "create-sheetgl": "./bin/cli.mjs"
+  },
+  "main": "./dist/lib/sheetgl.cjs",
+  "module": "./dist/lib/sheetgl.js",
+  "types": "./dist/lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib/types/index.d.ts",
+      "import": "./dist/lib/sheetgl.js",
+      "require": "./dist/lib/sheetgl.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/lib",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build:demo": "tsc -b && vite build",
+    "build:lib": "tsc -p tsconfig.lib.json && vite build --config vite.lib.config.ts",
+    "build": "npm run build:demo && npm run build:lib",
+    "prepublishOnly": "npm run build:lib",
+    "cli": "node ./bin/cli.mjs",
+    "doctor": "node ./bin/cli.mjs doctor",
+    "pack:check": "npm pack --dry-run",
     "lint": "oxlint",
     "preview": "vite preview"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
   },
   "dependencies": {
     "lucide-react": "^1.60.0",
