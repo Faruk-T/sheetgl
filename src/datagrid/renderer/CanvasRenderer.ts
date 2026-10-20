@@ -384,6 +384,7 @@ export class CanvasRenderer {
       this.renderHeaders(
         ctx,
         geometry,
+        store,
         theme,
         scrollLeft,
         width,
@@ -427,13 +428,23 @@ export class CanvasRenderer {
       this.isColumnReadonly(col, permissions) ||
       (col.canEdit ? !col.canEdit(rowData, col) : false);
     const isDirty = store.isCellDirty?.(rowKey, col.id) ?? false;
+    const isColDirty = store.isColumnDirty?.(col.id) ?? false;
 
-    // Subtle background for readonly, inserted, dirty, or loading states
+    // DevExtreme-style background for dirty cells (dx-cell-modified), dirty columns, inserted rows, loading, or readonly
     if (isRowLoading) {
-      ctx.fillStyle = theme.isDark ? 'rgba(255, 159, 10, 0.08)' : 'rgba(255, 149, 0, 0.06)';
+      ctx.fillStyle = theme.isDark ? 'rgba(255, 159, 10, 0.14)' : 'rgba(255, 149, 0, 0.10)';
+      ctx.fillRect(cellX, rowY, colW, rowH);
+    } else if (isDirty) {
+      // DevExtreme dx-cell-modified distinct green highlight
+      ctx.fillStyle = theme.isDark ? 'rgba(34, 197, 94, 0.22)' : 'rgba(22, 163, 74, 0.15)';
       ctx.fillRect(cellX, rowY, colW, rowH);
     } else if (isRowInserted) {
-      ctx.fillStyle = theme.isDark ? 'rgba(48, 209, 88, 0.06)' : 'rgba(52, 199, 89, 0.05)';
+      // DevExtreme dx-row-inserted highlight
+      ctx.fillStyle = theme.isDark ? 'rgba(48, 209, 88, 0.10)' : 'rgba(52, 199, 89, 0.08)';
+      ctx.fillRect(cellX, rowY, colW, rowH);
+    } else if (isColDirty) {
+      // Subtle column-wide tint when this column has uncommitted modifications
+      ctx.fillStyle = theme.isDark ? 'rgba(34, 197, 94, 0.05)' : 'rgba(22, 163, 74, 0.04)';
       ctx.fillRect(cellX, rowY, colW, rowH);
     } else if (isReadonly && col.type !== 'action' && col.type !== 'sparkline') {
       ctx.fillStyle = theme.isDark ? 'rgba(255, 255, 255, 0.018)' : 'rgba(0, 0, 0, 0.018)';
@@ -470,14 +481,19 @@ export class CanvasRenderer {
       isDirty,
     });
 
-    // Dirty Cell Top-Right Triangle Indicator (Batch Edit Mode)
+    // DevExtreme dx-cell-modified Crisp Green Cell Border + Top-Right Triangle Indicator
     if (isDirty) {
       ctx.save();
-      ctx.fillStyle = '#30D158';
+      const dirtyStroke = theme.isDark ? '#22C55E' : '#16A34A';
+      ctx.strokeStyle = dirtyStroke;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(cellX + 0.75, rowY + 0.75, colW - 1.5, rowH - 1.5);
+
+      ctx.fillStyle = dirtyStroke;
       ctx.beginPath();
-      ctx.moveTo(cellX + colW - 7, rowY);
+      ctx.moveTo(cellX + colW - 8, rowY);
       ctx.lineTo(cellX + colW, rowY);
-      ctx.lineTo(cellX + colW, rowY + 7);
+      ctx.lineTo(cellX + colW, rowY + 8);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
@@ -497,6 +513,7 @@ export class CanvasRenderer {
   private static renderHeaders(
     ctx: CanvasRenderingContext2D,
     geometry: GeometryEngine,
+    store: IDataStore,
     theme: IGridThemeTokens,
     scrollLeft: number,
     width: number,
@@ -534,6 +551,7 @@ export class CanvasRenderer {
         colIdx >= normSel.minCol && colIdx <= normSel.maxCol,
         hoveredFilterColIndex === colIdx,
         activeFilterColumnIds?.has(col.id) ?? false,
+        store.isColumnDirty?.(col.id) ?? false,
         permissions
       );
     }
@@ -558,6 +576,7 @@ export class CanvasRenderer {
         i >= normSel.minCol && i <= normSel.maxCol,
         hoveredFilterColIndex === i,
         activeFilterColumnIds?.has(col.id) ?? false,
+        store.isColumnDirty?.(col.id) ?? false,
         permissions
       );
       curX += col.width;
@@ -600,11 +619,17 @@ export class CanvasRenderer {
     isColSelected: boolean,
     isFilterHovered: boolean,
     isFilterActive: boolean,
+    isColumnDirty: boolean,
     permissions?: GridPermissions
   ): void {
     ctx.save();
 
-    if (isColSelected) {
+    if (isColumnDirty) {
+      ctx.fillStyle = theme.isDark ? 'rgba(34, 197, 94, 0.16)' : 'rgba(22, 163, 74, 0.12)';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = theme.isDark ? '#22C55E' : '#16A34A';
+      ctx.fillRect(x, y, w, 2.5);
+    } else if (isColSelected) {
       ctx.fillStyle = theme.isDark ? 'rgba(10, 132, 255, 0.12)' : 'rgba(0, 122, 255, 0.07)';
       ctx.fillRect(x, y, w, h);
     }

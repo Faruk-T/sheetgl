@@ -7,14 +7,21 @@ export type ColumnType =
   | 'text'
   | 'number'
   | 'currency'
+  | 'percent'
   | 'boolean'
   | 'select'
   | 'dropdown'
   | 'multiselect'
+  | 'lookup'
+  | 'object'
   | 'progress'
   | 'date'
   | 'datetime'
   | 'time'
+  | 'email'
+  | 'url'
+  | 'phone'
+  | 'color'
   | 'rating'
   | 'sparkline'
   | 'action'
@@ -25,11 +32,69 @@ export type ColumnPermission = 'write' | 'readonly' | 'read';
 export interface SelectOption {
   value: string;
   label: string;
+  subtitle?: string;
   bg?: string;
   fg?: string;
   darkBg?: string;
   darkFg?: string;
 }
+
+export interface ValidationCallbackParams {
+  value: any;
+  data: Record<string, any>;
+  column: ColumnDef;
+}
+
+export type ValidationRuleResult = boolean | { valid: boolean; message?: string };
+
+export type ValidationRule =
+  | {
+      type: 'required';
+      message?: string;
+    }
+  | {
+      type: 'range';
+      min?: number;
+      max?: number;
+      message?: string;
+    }
+  | {
+      type: 'stringLength';
+      min?: number;
+      max?: number;
+      message?: string;
+    }
+  | {
+      type: 'pattern';
+      pattern: RegExp | string;
+      message?: string;
+    }
+  | {
+      type: 'email';
+      message?: string;
+    }
+  | {
+      type: 'url';
+      message?: string;
+    }
+  | {
+      type: 'compare';
+      comparisonTarget: (row: Record<string, any>) => any;
+      comparisonType?: '==' | '!=' | '<' | '<=' | '>' | '>=';
+      message?: string;
+    }
+  | {
+      type: 'custom';
+      validationCallback: (params: ValidationCallbackParams) => ValidationRuleResult;
+      message?: string;
+    }
+  | {
+      type: 'async';
+      validationCallback: (
+        params: ValidationCallbackParams
+      ) => Promise<ValidationRuleResult> | ValidationRuleResult;
+      message?: string;
+    };
 
 export interface CascadingUpdateContext {
   rowKey: any;
@@ -54,6 +119,8 @@ export interface ColumnDef {
   groupable?: boolean;
   currencySymbol?: string;
   decimalDigits?: number;
+  showVarianceSign?: boolean;
+  objectDisplayKey?: string;
   options?: SelectOption[];
   sparklineColor?: string;
   buttonText?: string;
@@ -68,9 +135,18 @@ export interface ColumnDef {
   canEdit?: (row: any, column: ColumnDef) => boolean;
 
   /**
-   * Cell validation rule before committing an edit
+   * Declarative DevExtreme/AG-Grid style static & async validation rules
    */
-  validator?: (value: any, row: any) => { valid: boolean; message?: string } | boolean;
+  validationRules?: ValidationRule[];
+
+  /**
+   * Cell validation callback (supports both synchronous/static and async Promise validation)
+   */
+  validator?: (
+    value: any,
+    row: any,
+    column: ColumnDef
+  ) => ValidationRuleResult | Promise<ValidationRuleResult>;
 
   /**
    * Enterprise setCellValue cascading hook (sync or async backend fetch).

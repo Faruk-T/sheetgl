@@ -75,8 +75,14 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     if (draft === displayVal) return;
 
     let parsed: any = draft;
-    if (column.type === 'number' || column.type === 'currency' || column.type === 'progress' || column.type === 'rating') {
-      const n = parseFloat(draft.replace(',', '.'));
+    if (
+      column.type === 'number' ||
+      column.type === 'currency' ||
+      column.type === 'percent' ||
+      column.type === 'progress' ||
+      column.type === 'rating'
+    ) {
+      const n = parseFloat(draft.replace(/[%$,]/g, (m) => (m === ',' ? '.' : '')));
       parsed = isNaN(n) ? 0 : n;
     } else if (column.type === 'boolean') {
       parsed = ['true', '1', 'yes', 'evet', 'doğru'].includes(draft.trim().toLowerCase());
@@ -85,6 +91,25 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
         .split(/[,;|]/)
         .map((s) => s.trim())
         .filter(Boolean);
+    } else if (column.type === 'object') {
+      try {
+        const obj = JSON.parse(draft);
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          parsed = obj;
+        }
+      } catch {
+        // Fallback key:value parser
+        const out: Record<string, any> = {};
+        for (const pair of draft.split(/[,;|]/)) {
+          const idx = pair.indexOf(':');
+          if (idx > 0) {
+            const k = pair.slice(0, idx).trim();
+            const v = pair.slice(idx + 1).trim();
+            if (k) out[k] = v;
+          }
+        }
+        if (Object.keys(out).length > 0) parsed = out;
+      }
     }
     onCommitValue(parsed);
   };

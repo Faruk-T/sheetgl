@@ -45,7 +45,20 @@ export class SortEngine {
       return a === b ? 0 : a ? 1 : -1;
     }
 
+    const strA =
+      typeof a === 'object' && a !== null
+        ? Array.isArray(a)
+          ? a.join(', ')
+          : JSON.stringify(a)
+        : String(a);
+    const strB =
+      typeof b === 'object' && b !== null
+        ? Array.isArray(b)
+          ? b.join(', ')
+          : JSON.stringify(b)
+        : String(b);
+
     // Metin karşılaştırması (Türkçe ve doğal sayı duyarlı)
-    return this.collator.compare(String(a), String(b));
+    return this.collator.compare(strA, strB);
   }
 }

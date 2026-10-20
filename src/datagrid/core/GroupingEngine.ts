@@ -1,6 +1,20 @@
 import { GroupDescriptor, SummaryType, VirtualRow } from '../types/group';
 
 export class GroupingEngine {
+  private static formatGroupKeyVal(raw: any): string {
+    if (raw === null || raw === undefined || raw === '') return '(Blank)';
+    if (Array.isArray(raw)) {
+      return raw.length > 0 ? raw.join(', ') : '(Blank)';
+    }
+    if (typeof raw === 'object') {
+      const entries = Object.entries(raw);
+      return entries.length > 0
+        ? entries.map(([k, v]) => `${k}: ${String(v)}`).join(' • ')
+        : '(Blank)';
+    }
+    return String(raw);
+  }
+
   public static collectGroupKeys(
     data: any[],
     groups: GroupDescriptor[],
@@ -14,12 +28,7 @@ export class GroupingEngine {
       const field = groups[level].selector;
       const buckets = new Map<any, any[]>();
       for (let i = 0; i < items.length; i++) {
-        const raw = items[i][field];
-        const val = Array.isArray(raw)
-          ? raw.length > 0
-            ? raw.join(', ')
-            : '(Blank)'
-          : raw ?? '(Blank)';
+        const val = this.formatGroupKeyVal(items[i][field]);
         let b = buckets.get(val);
         if (!b) {
           b = [];
@@ -83,12 +92,7 @@ export class GroupingEngine {
     const buckets = new Map<any, any[]>();
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const raw = item[field];
-      const val = Array.isArray(raw)
-        ? raw.length > 0
-          ? raw.join(', ')
-          : '(Blank)'
-        : raw ?? '(Blank)';
+      const val = this.formatGroupKeyVal(item[field]);
       let bucket = buckets.get(val);
       if (!bucket) {
         bucket = [];

@@ -17,14 +17,26 @@ export class LocaleEngine {
     this.locales.set(name, locale);
   }
 
-  public static resolve(input?: LocaleInput): IGridLocale {
-    if (!input) return enUS;
+  public static detectBrowserLocaleCode(): 'tr' | 'en' {
+    if (typeof navigator !== 'undefined' && navigator.language) {
+      return navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
+    }
+    return 'en';
+  }
 
-    if (typeof input === 'string') {
-      return this.locales.get(input) || enUS;
+  public static resolve(input?: LocaleInput): IGridLocale {
+    if (!input || input === 'auto') {
+      const code = this.detectBrowserLocaleCode();
+      return this.locales.get(code) || enUS;
     }
 
-    // Kullanıcı kısmi (partial) bir nesne verdiyse varsayılan enUS üzerine merge et
+    if (typeof input === 'string') {
+      const exact = this.locales.get(input);
+      if (exact) return exact;
+      if (input.toLowerCase().startsWith('tr')) return trTR;
+      return enUS;
+    }
+
     return {
       ...enUS,
       ...input,

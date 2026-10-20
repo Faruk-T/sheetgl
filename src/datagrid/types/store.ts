@@ -73,6 +73,7 @@ export interface IMutableStore {
   getPendingChanges?(): BatchChanges;
   hasPendingChanges?(): boolean;
   isCellDirty?(rowKey: any, columnId: string): boolean;
+  isColumnDirty?(columnId: string): boolean;
   isRowInserted?(rowKey: any): boolean;
   saveBatchChanges?(): Promise<BatchChanges>;
   discardBatchChanges?(): void;

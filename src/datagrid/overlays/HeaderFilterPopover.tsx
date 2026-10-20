@@ -4,7 +4,7 @@ import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { IDataStore } from '../types/store';
 import { ColumnFilterState, DistinctItem, FilterOperation } from '../types/filter';
-import { BLANK_FILTER_TOKEN } from '../core/FilterEngine';
+import { BLANK_FILTER_TOKEN, FilterEngine } from '../core/FilterEngine';
 
 export interface HeaderFilterPopoverProps {
   column: ColumnDef;
@@ -19,6 +19,139 @@ export interface HeaderFilterPopoverProps {
   onToggleGroup?: () => void;
   isGrouped?: boolean;
   onClose: () => void;
+}
+
+const NUMERIC_COLUMN_TYPES = new Set([
+  'number',
+  'currency',
+  'percent',
+  'progress',
+  'rating',
+]);
+
+/**
+ * Formats a raw cell value identically to how the cell painter renders it on Canvas.
+ */
+export function formatCellStructureValue(
+  rawVal: any,
+  column: ColumnDef,
+  locale: IGridLocale
+): string {
+  if (rawVal === BLANK_FILTER_TOKEN || rawVal === null || rawVal === undefined || rawVal === '') {
+    return locale.emptyText;
+  }
+
+  const isTR = locale.code.startsWith('tr');
+
+  if (column.type === 'currency') {
+    const num = FilterEngine.parseNumeric(rawVal);
+    if (isNaN(num)) return String(rawVal);
+    const digits = column.decimalDigits ?? 2;
+    const sym = column.currencySymbol || '$';
+    const numStr = num.toLocaleString(locale.code, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+    return isTR ? `${numStr} ${sym}` : `${sym}${numStr}`;
+  }
+
+  if (column.type === 'number') {
+    const num = FilterEngine.parseNumeric(rawVal);
+    if (isNaN(num)) return String(rawVal);
+    const isInt = column.decimalDigits === 0 || (column.decimalDigits === undefined && Number.isInteger(num));
+    const digits = isInt ? 0 : column.decimalDigits ?? 2;
+    return num.toLocaleString(locale.code, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  }
+
+  if (column.type === 'percent') {
+    const num = FilterEngine.parseNumeric(rawVal);
+    if (isNaN(num)) return String(rawVal);
+    const digits = column.decimalDigits ?? 1;
+    const numStr = num.toLocaleString(locale.code, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+    const sign = (column.showVarianceSign ?? true) && num > 0 ? '+' : '';
+    return `${sign}${numStr}%`;
+  }
+
+  if (column.type === 'progress') {
+    const num = FilterEngine.parseNumeric(rawVal);
+    if (isNaN(num)) return String(rawVal);
+    return isTR ? `%${Math.round(num)}` : `${Math.round(num)}%`;
+  }
+
+  if (column.type === 'rating') {
+    const num = Math.max(0, Math.min(5, Math.round(FilterEngine.parseNumeric(rawVal) || 0)));
+    return `${'★'.repeat(num)}${'☆'.repeat(5 - num)} (${num})`;
+  }
+
+  if (column.type === 'boolean') {
+    const b =
+      typeof rawVal === 'boolean'
+        ? rawVal
+        : ['true', '1', 'evet', 'doğru', 'yes'].includes(String(rawVal).toLowerCase());
+    return b ? locale.trueText : locale.falseText;
+  }
+
+  if (
+    (column.type === 'select' ||
+      column.type === 'dropdown' ||
+      column.type === 'lookup' ||
+      column.type === 'multiselect') &&
+    column.options
+  ) {
+    const opt = column.options.find((o) => String(o.value) === String(rawVal));
+    if (opt) return opt.subtitle ? `${opt.label} (${opt.subtitle})` : opt.label;
+  }
+
+  if (column.type === 'object' && typeof rawVal === 'object' && !Array.isArray(rawVal)) {
+    return Object.entries(rawVal)
+      .map(([k, v]) => `${k}: ${String(v)}`)
+      .join(' • ');
+  }
+
+  return String(rawVal);
+}
+
+/**
+ * Formats a numeric input string live with locale thousands separators while preserving the user's decimal typing.
+ */
+function formatLiveNumericInput(rawInput: string, isTR: boolean): string {
+  const thousandSep = isTR ? '.' : ',';
+  const decSep = isTR ? ',' : '.';
+
+  // Strip everything except digits, minus, and decimal separator
+  let cleaned = rawInput.replace(new RegExp(`[^0-9\\-${decSep === ',' ? ',' : '\\.'}]`, 'g'), '');
+  if (!cleaned) return '';
+
+  const isNeg = cleaned.startsWith('-');
+  cleaned = cleaned.replace(/-/g, '');
+
+  const parts = cleaned.split(decSep);
+  const intPartRaw = parts[0].replace(/^0+(?=\d)/, '');
+  const intFormatted = intPartRaw.replace(/\B(?=(\d{3})+(?!\d))/g, thousandSep);
+
+  if (parts.length > 1) {
+    return `${isNeg ? '-' : ''}${intFormatted}${decSep}${parts[1].slice(0, 4)}`;
+  }
+  return `${isNeg ? '-' : ''}${intFormatted}`;
+}
+
+function initialConditionInputDisplay(rawVal: any, column: ColumnDef, isTR: boolean): string {
+  if (rawVal === undefined || rawVal === null || rawVal === '') return '';
+  if (NUMERIC_COLUMN_TYPES.has(column.type)) {
+    const num = FilterEngine.parseNumeric(rawVal);
+    if (!isNaN(num)) {
+      const decSep = isTR ? ',' : '.';
+      const str = String(num).replace('.', decSep);
+      return formatLiveNumericInput(str, isTR);
+    }
+  }
+  return String(rawVal);
 }
 
 export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
@@ -36,27 +169,35 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   onClose,
 }) => {
   const isTR = locale.code.startsWith('tr');
+  const isNumericCol = NUMERIC_COLUMN_TYPES.has(column.type);
+
   const [tab, setTab] = useState<'values' | 'condition'>(activeFilter?.mode || 'values');
   const [allItems, setAllItems] = useState<DistinctItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
-  const [selectedSet, setSelectedSet] = useState<Set<any>>(() => new Set(activeFilter?.selectedValues || []));
+  const [selectedSet, setSelectedSet] = useState<Set<any>>(
+    () => new Set(activeFilter?.selectedValues || [])
+  );
+  const [listScrollTop, setListScrollTop] = useState<number>(0);
 
   // Condition filter states
-  const defaultOp: FilterOperation =
-    column.type === 'number' || column.type === 'currency' || column.type === 'rating' || column.type === 'progress'
-      ? '>'
-      : 'contains';
+  const defaultOp: FilterOperation = isNumericCol
+    ? '<'
+    : column.type === 'date' || column.type === 'datetime' || column.type === 'time' || column.type === 'boolean'
+    ? '='
+    : 'contains';
+
   const [operator, setOperator] = useState<FilterOperation>(activeFilter?.operator || defaultOp);
-  const [condVal1, setCondVal1] = useState<string>(
-    activeFilter?.value1 !== undefined ? String(activeFilter.value1) : ''
+  const [condVal1, setCondVal1] = useState<string>(() =>
+    initialConditionInputDisplay(activeFilter?.value1, column, isTR)
   );
-  const [condVal2, setCondVal2] = useState<string>(
-    activeFilter?.value2 !== undefined ? String(activeFilter.value2) : ''
+  const [condVal2, setCondVal2] = useState<string>(() =>
+    initialConditionInputDisplay(activeFilter?.value2, column, isTR)
   );
 
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const condInputRef = useRef<HTMLInputElement | null>(null);
 
   // Fetch all distinct values once when opened for this column
   useEffect(() => {
@@ -68,7 +209,6 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       if (activeFilter && activeFilter.mode === 'values' && activeFilter.selectedValues) {
         setSelectedSet(new Set(activeFilter.selectedValues));
       } else {
-        // No active value filter -> start with all items checked
         setSelectedSet(new Set(res.map((r) => r.value)));
       }
       setLoading(false);
@@ -79,8 +219,12 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   }, [column.id, store]);
 
   useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
+    if (tab === 'values') {
+      searchInputRef.current?.focus();
+    } else {
+      condInputRef.current?.focus();
+    }
+  }, [tab]);
 
   // Outside click listener
   useEffect(() => {
@@ -94,15 +238,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   }, [onClose]);
 
   const formatItemLabel = (it: DistinctItem): string => {
-    if (it.value === BLANK_FILTER_TOKEN) return locale.emptyText;
-    if (column.type === 'boolean') {
-      return it.value ? locale.trueText : locale.falseText;
-    }
-    if ((column.type === 'select' || column.type === 'dropdown' || column.type === 'multiselect') && column.options) {
-      const opt = column.options.find((o) => o.value === it.value);
-      if (opt) return opt.label;
-    }
-    return it.label;
+    return formatCellStructureValue(it.value, column, locale);
   };
 
   const visibleItems = useMemo(() => {
@@ -113,6 +249,28 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       return display.includes(q) || String(it.value).toLowerCase().includes(q);
     });
   }, [allItems, search, column, locale]);
+
+  // Live count of rows matching the current Condition Rule
+  const conditionMatchCount = useMemo(() => {
+    if (tab !== 'condition') return null;
+    if (!condVal1.trim() && operator !== '=') return null;
+    const v1 = isNumericCol ? FilterEngine.parseNumeric(condVal1) : condVal1;
+    const v2 = isNumericCol ? FilterEngine.parseNumeric(condVal2) : condVal2;
+    const target = operator === 'between' ? [v1, v2] : v1;
+
+    let matched = 0;
+    let total = 0;
+    for (let i = 0; i < allItems.length; i++) {
+      const item = allItems[i];
+      const itemCount = item.count ?? 1;
+      total += itemCount;
+      const rawVal = item.value === BLANK_FILTER_TOKEN ? '' : item.value;
+      if (FilterEngine.match(rawVal, operator, target)) {
+        matched += itemCount;
+      }
+    }
+    return { matched, total };
+  }, [tab, condVal1, condVal2, operator, allItems, isNumericCol]);
 
   const areAllVisibleChecked =
     visibleItems.length > 0 && visibleItems.every((it) => selectedSet.has(it.value));
@@ -159,12 +317,25 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       if (!condVal1.trim() && operator !== '=') {
         onApply(null);
       } else {
+        const normalizedV1 = isNumericCol
+          ? (() => {
+              const n = FilterEngine.parseNumeric(condVal1);
+              return isNaN(n) ? condVal1 : n;
+            })()
+          : condVal1;
+        const normalizedV2 = isNumericCol
+          ? (() => {
+              const n = FilterEngine.parseNumeric(condVal2);
+              return isNaN(n) ? condVal2 : n;
+            })()
+          : condVal2;
+
         onApply({
           columnId: column.id,
           mode: 'condition',
           operator,
-          value1: condVal1,
-          value2: condVal2,
+          value1: normalizedV1,
+          value2: normalizedV2,
         });
       }
     }
@@ -172,12 +343,266 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   };
 
   const handleClear = () => {
+    setSearch('');
+    setCondVal1('');
+    setCondVal2('');
+    setSelectedSet(new Set(allItems.map((r) => r.value)));
     onApply(null);
     onClose();
   };
 
+  const renderStructuredConditionInput = (
+    val: string,
+    setVal: (v: string) => void,
+    placeholder: string,
+    autoFocusRef?: React.RefObject<HTMLInputElement | null>
+  ) => {
+    // 1. Boolean Column -> True / False Select
+    if (column.type === 'boolean') {
+      return (
+        <select
+          value={val || 'true'}
+          onChange={(e) => setVal(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '7px 8px',
+            backgroundColor: theme.dom.inputBg,
+            color: theme.dom.inputText,
+            border: `1px solid ${theme.dom.inputBorder}`,
+            borderRadius: 6,
+            outline: 'none',
+            fontSize: 12,
+          }}
+        >
+          <option value="">{isTR ? 'Seçiniz...' : 'Select...'}</option>
+          <option value="true">✓ {locale.trueText}</option>
+          <option value="false">✕ {locale.falseText}</option>
+        </select>
+      );
+    }
+
+    // 2. Select / Dropdown / Lookup / MultiSelect with Options
+    if (
+      (column.type === 'select' ||
+        column.type === 'dropdown' ||
+        column.type === 'lookup' ||
+        column.type === 'multiselect') &&
+      column.options &&
+      column.options.length > 0 &&
+      (operator === '=' || operator === '<>' || operator === 'contains')
+    ) {
+      return (
+        <select
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '7px 8px',
+            backgroundColor: theme.dom.inputBg,
+            color: theme.dom.inputText,
+            border: `1px solid ${theme.dom.inputBorder}`,
+            borderRadius: 6,
+            outline: 'none',
+            fontSize: 12,
+          }}
+        >
+          <option value="">{isTR ? 'Seçenek seçin...' : 'Choose option...'}</option>
+          {column.options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label} {opt.subtitle ? `(${opt.subtitle})` : ''}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    // 3. Date Column -> Native Date Picker
+    if (column.type === 'date') {
+      return (
+        <input
+          ref={autoFocusRef}
+          type="date"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '6px 8px',
+            backgroundColor: theme.dom.inputBg,
+            color: theme.dom.inputText,
+            border: `1px solid ${theme.dom.inputBorder}`,
+            borderRadius: 6,
+            outline: 'none',
+            fontSize: 12,
+            fontFamily: 'monospace',
+            boxSizing: 'border-box',
+          }}
+        />
+      );
+    }
+
+    // 4. Time Column -> Native Time Picker
+    if (column.type === 'time') {
+      return (
+        <input
+          ref={autoFocusRef}
+          type="time"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '6px 8px',
+            backgroundColor: theme.dom.inputBg,
+            color: theme.dom.inputText,
+            border: `1px solid ${theme.dom.inputBorder}`,
+            borderRadius: 6,
+            outline: 'none',
+            fontSize: 12,
+            fontFamily: 'monospace',
+            boxSizing: 'border-box',
+          }}
+        />
+      );
+    }
+
+    // 5. Currency / Number / Percent / Progress / Rating -> Live Formatted Cell-Structured Input
+    if (isNumericCol) {
+      const sym =
+        column.type === 'currency'
+          ? column.currencySymbol || '$'
+          : column.type === 'percent' || column.type === 'progress'
+          ? '%'
+          : column.type === 'rating'
+          ? '★'
+          : '';
+      const prefixSym =
+        (column.type === 'currency' && !isTR) || (column.type === 'progress' && isTR) ? sym : '';
+      const suffixSym =
+        (column.type === 'currency' && isTR) ||
+        (column.type === 'progress' && !isTR) ||
+        column.type === 'percent' ||
+        column.type === 'rating'
+          ? sym
+          : '';
+
+      const parsedNum = FilterEngine.parseNumeric(val);
+      const cellPreview =
+        val.trim() !== '' && !isNaN(parsedNum)
+          ? formatCellStructureValue(parsedNum, column, locale)
+          : null;
+
+      return (
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              backgroundColor: theme.dom.inputBg,
+              border: `1px solid ${theme.dom.inputBorder}`,
+              borderRadius: 6,
+              padding: '0 8px',
+            }}
+          >
+            {prefixSym && (
+              <span
+                style={{
+                  color: theme.dom.accentColor,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  marginRight: 6,
+                  fontFamily: 'monospace',
+                }}
+              >
+                {prefixSym}
+              </span>
+            )}
+            <input
+              ref={autoFocusRef}
+              type="text"
+              inputMode="decimal"
+              value={val}
+              onChange={(e) => {
+                setVal(formatLiveNumericInput(e.target.value, isTR));
+              }}
+              placeholder={
+                column.type === 'currency'
+                  ? isTR
+                    ? '15.000,47'
+                    : '15,000.47'
+                  : column.type === 'progress' || column.type === 'percent'
+                  ? '20'
+                  : placeholder
+              }
+              style={{
+                flex: 1,
+                padding: '6px 0',
+                backgroundColor: 'transparent',
+                color: theme.dom.inputText,
+                border: 'none',
+                outline: 'none',
+                fontSize: 12.5,
+                fontWeight: 600,
+                fontFamily: theme.fontFamily,
+                textAlign: column.type === 'currency' || column.type === 'number' || column.type === 'percent' ? 'right' : 'left',
+              }}
+            />
+            {suffixSym && (
+              <span
+                style={{
+                  color: theme.dom.accentColor,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  marginLeft: 6,
+                  fontFamily: 'monospace',
+                }}
+              >
+                {suffixSym}
+              </span>
+            )}
+          </div>
+          {cellPreview && (
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 11,
+                color: theme.dom.accentColor,
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontWeight: 600,
+              }}
+            >
+              <span>{isTR ? 'Hücre biçimi:' : 'Cell format:'}</span>
+              <span style={{ fontFamily: 'monospace' }}>{cellPreview}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 6. Default Text / Email / URL / Phone / Object Input
+    return (
+      <input
+        ref={autoFocusRef}
+        type="text"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: '100%',
+          padding: '6px 8px',
+          backgroundColor: theme.dom.inputBg,
+          color: theme.dom.inputText,
+          border: `1px solid ${theme.dom.inputBorder}`,
+          borderRadius: 6,
+          outline: 'none',
+          fontSize: 12,
+          boxSizing: 'border-box',
+        }}
+      />
+    );
+  };
+
   // Compute safe horizontal position inside viewport
-  const popoverWidth = 285;
+  const popoverWidth = 295;
   const rawLeft = anchorRect.x + anchorRect.width - popoverWidth;
   const safeLeft = Math.max(8, Math.min(rawLeft, viewportWidth - popoverWidth - 16));
 
@@ -190,7 +615,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Escape') onClose();
-        if (e.key === 'Enter' && tab === 'condition') handleApply();
+        if (e.key === 'Enter') handleApply();
       }}
       style={{
         position: 'absolute',
@@ -286,26 +711,26 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
             column.type !== 'sparkline' &&
             column.type !== 'action' &&
             onToggleGroup && (
-            <button
-              type="button"
-              onClick={() => {
-                onToggleGroup();
-                onClose();
-              }}
-              style={{
-                padding: '4px 8px',
-                fontSize: 11,
-                borderRadius: 5,
-                border: `1px solid ${theme.dom.popoverBorder}`,
-                backgroundColor: isGrouped ? theme.dom.accentColor : 'transparent',
-                color: isGrouped ? '#FFFFFF' : theme.dom.popoverText,
-                cursor: 'pointer',
-                fontWeight: 500,
-              }}
-            >
-              {isGrouped ? (isTR ? 'Grubu Kaldır' : 'Ungroup') : (isTR ? 'Grupla' : 'Group')}
-            </button>
-          )}
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleGroup();
+                  onClose();
+                }}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11,
+                  borderRadius: 5,
+                  border: `1px solid ${theme.dom.popoverBorder}`,
+                  backgroundColor: isGrouped ? theme.dom.accentColor : 'transparent',
+                  color: isGrouped ? '#FFFFFF' : theme.dom.popoverText,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                {isGrouped ? (isTR ? 'Grubu Kaldır' : 'Ungroup') : isTR ? 'Grupla' : 'Group'}
+              </button>
+            )}
         </div>
       </div>
 
@@ -326,13 +751,16 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
             fontSize: 11,
             fontWeight: tab === 'values' ? 700 : 500,
             border: 'none',
-            borderBottom: tab === 'values' ? `2px solid ${theme.dom.accentColor}` : '2px solid transparent',
+            borderBottom:
+              tab === 'values' ? `2px solid ${theme.dom.accentColor}` : '2px solid transparent',
             backgroundColor: 'transparent',
             color: tab === 'values' ? theme.dom.accentColor : theme.dom.popoverText,
             cursor: 'pointer',
           }}
         >
-          {isTR ? `Değer Listesi (${selectedSet.size}/${allItems.length})` : `Value List (${selectedSet.size}/${allItems.length})`}
+          {isTR
+            ? `Değer Listesi (${selectedSet.size}/${allItems.length})`
+            : `Value List (${selectedSet.size}/${allItems.length})`}
         </button>
         <button
           type="button"
@@ -343,7 +771,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
             fontSize: 11,
             fontWeight: tab === 'condition' ? 700 : 500,
             border: 'none',
-            borderBottom: tab === 'condition' ? `2px solid ${theme.dom.accentColor}` : '2px solid transparent',
+            borderBottom:
+              tab === 'condition' ? `2px solid ${theme.dom.accentColor}` : '2px solid transparent',
             backgroundColor: 'transparent',
             color: tab === 'condition' ? theme.dom.accentColor : theme.dom.popoverText,
             cursor: 'pointer',
@@ -361,7 +790,27 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
               ref={searchInputRef}
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                const nextQuery = e.target.value;
+                setSearch(nextQuery);
+                setListScrollTop(0);
+                const q = nextQuery.toLowerCase().trim();
+                if (q) {
+                  const matched = allItems.filter((it) => {
+                    const display = formatItemLabel(it).toLowerCase();
+                    return display.includes(q) || String(it.value).toLowerCase().includes(q);
+                  });
+                  setSelectedSet(new Set(matched.map((m) => m.value)));
+                } else if (
+                  activeFilter &&
+                  activeFilter.mode === 'values' &&
+                  activeFilter.selectedValues
+                ) {
+                  setSelectedSet(new Set(activeFilter.selectedValues));
+                } else {
+                  setSelectedSet(new Set(allItems.map((r) => r.value)));
+                }
+              }}
               placeholder={locale.searchValuesPlaceholder}
               style={{
                 width: '100%',
@@ -399,7 +848,12 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                   if (el) el.indeterminate = isIndeterminate;
                 }}
                 onChange={() => {}}
-                style={{ cursor: 'pointer', accentColor: theme.dom.accentColor, width: 14, height: 14 }}
+                style={{
+                  cursor: 'pointer',
+                  accentColor: theme.dom.accentColor,
+                  width: 14,
+                  height: 14,
+                }}
               />
               <span>
                 {search.trim()
@@ -414,83 +868,136 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
             </span>
           </div>
 
-          {/* Distinct Values Checkbox List */}
-          <div style={{ maxHeight: 200, overflowY: 'auto', padding: '4px 6px' }}>
+          {/* Virtualized Distinct Values Checkbox List */}
+          <div
+            onScroll={(e) => setListScrollTop(e.currentTarget.scrollTop)}
+            style={{ height: 196, overflowY: 'auto', padding: '4px 6px', position: 'relative' }}
+          >
             {loading ? (
               <div style={{ padding: '12px 8px', color: '#8E8E93' }}>{locale.loading}</div>
             ) : visibleItems.length === 0 ? (
               <div style={{ padding: '12px 8px', color: '#8E8E93' }}>{locale.noMatches}</div>
             ) : (
-              visibleItems.map((it) => {
-                const isChecked = selectedSet.has(it.value);
-                const optMatch =
-                  column.type === 'select' || column.type === 'dropdown' || column.type === 'multiselect'
-                    ? column.options?.find((o) => o.value === it.value)
-                    : undefined;
+              (() => {
+                const ITEM_H = 28;
+                const totalH = visibleItems.length * ITEM_H;
+                const startIdx = Math.max(0, Math.floor(listScrollTop / ITEM_H) - 3);
+                const endIdx = Math.min(
+                  visibleItems.length - 1,
+                  Math.ceil((listScrollTop + 196) / ITEM_H) + 3
+                );
+                const slice = visibleItems.slice(startIdx, endIdx + 1);
+
                 return (
-                  <div
-                    key={String(it.value)}
-                    onClick={() => toggleSingleItem(it.value)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '5px 8px',
-                      borderRadius: 5,
-                      cursor: 'pointer',
-                      backgroundColor: isChecked
-                        ? theme.isDark
-                          ? 'rgba(10, 132, 255, 0.12)'
-                          : 'rgba(0, 122, 255, 0.06)'
-                        : 'transparent',
-                      marginBottom: 1,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {}}
-                        style={{
-                          cursor: 'pointer',
-                          accentColor: theme.dom.accentColor,
-                          width: 14,
-                          height: 14,
-                          flexShrink: 0,
-                        }}
-                      />
-                      {optMatch && (
-                        <span
+                  <div style={{ height: totalH, position: 'relative' }}>
+                    {slice.map((it, idx) => {
+                      const realIdx = startIdx + idx;
+                      const isChecked = selectedSet.has(it.value);
+                      const optMatch =
+                        column.type === 'select' ||
+                        column.type === 'dropdown' ||
+                        column.type === 'lookup' ||
+                        column.type === 'multiselect'
+                          ? column.options?.find((o) => o.value === it.value)
+                          : undefined;
+                      return (
+                        <div
+                          key={String(it.value)}
+                          onClick={() => toggleSingleItem(it.value)}
                           style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            backgroundColor: theme.isDark
-                              ? optMatch.darkFg || '#60A5FA'
-                              : optMatch.fg || '#2563EB',
-                            flexShrink: 0,
+                            position: 'absolute',
+                            top: realIdx * ITEM_H,
+                            left: 0,
+                            right: 0,
+                            height: ITEM_H - 2,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0 8px',
+                            borderRadius: 5,
+                            cursor: 'pointer',
+                            backgroundColor: isChecked
+                              ? theme.isDark
+                                ? 'rgba(10, 132, 255, 0.12)'
+                                : 'rgba(0, 122, 255, 0.06)'
+                              : 'transparent',
+                            boxSizing: 'border-box',
                           }}
-                        />
-                      )}
-                      <span
-                        style={{
-                          textOverflow: 'ellipsis',
-                          overflow: 'hidden',
-                          whiteSpace: 'nowrap',
-                          fontWeight: isChecked ? 600 : 400,
-                        }}
-                      >
-                        {formatItemLabel(it)}
-                      </span>
-                    </div>
-                    {it.count !== undefined && (
-                      <span style={{ color: '#8E8E93', fontSize: 11, marginLeft: 6, flexShrink: 0 }}>
-                        {it.count}
-                      </span>
-                    )}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {}}
+                              style={{
+                                cursor: 'pointer',
+                                accentColor: theme.dom.accentColor,
+                                width: 14,
+                                height: 14,
+                                flexShrink: 0,
+                              }}
+                            />
+                            {optMatch && (
+                              <span
+                                style={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  backgroundColor: theme.isDark
+                                    ? optMatch.darkFg || '#60A5FA'
+                                    : optMatch.fg || '#2563EB',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                            {column.type === 'color' && typeof it.value === 'string' && (
+                              <span
+                                style={{
+                                  width: 10,
+                                  height: 10,
+                                  borderRadius: 3,
+                                  backgroundColor: it.value,
+                                  border: '1px solid rgba(255,255,255,0.25)',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                            <span
+                              style={{
+                                textOverflow: 'ellipsis',
+                                overflow: 'hidden',
+                                whiteSpace: 'nowrap',
+                                fontWeight: isChecked ? 600 : 400,
+                              }}
+                            >
+                              {formatItemLabel(it)}
+                            </span>
+                          </div>
+                          {it.count !== undefined && (
+                            <span
+                              style={{
+                                color: '#8E8E93',
+                                fontSize: 11,
+                                marginLeft: 6,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {it.count}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
-              })
+              })()
             )}
           </div>
         </>
@@ -510,46 +1017,58 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                 backgroundColor: theme.dom.inputBg,
                 color: theme.dom.inputText,
                 border: `1px solid ${theme.dom.inputBorder}`,
-                borderRadius: 5,
+                borderRadius: 6,
                 outline: 'none',
                 fontSize: 12,
               }}
             >
-              <option value="contains">{isTR ? 'İçerir (Contains)' : 'Contains'}</option>
-              <option value="notcontains">{isTR ? 'İçermez (Does not contain)' : 'Does not contain'}</option>
-              <option value="=">{isTR ? 'Eşittir (=)' : 'Equals (=)'}</option>
-              <option value="<>">{isTR ? 'Eşit Değildir (≠)' : 'Does not equal (≠)'}</option>
-              <option value="startswith">{isTR ? 'İle Başlar (Starts with)' : 'Starts with'}</option>
-              <option value="endswith">{isTR ? 'İle Biter (Ends with)' : 'Ends with'}</option>
-              <option value=">">{isTR ? 'Büyüktür (>)' : 'Greater than (>)'}</option>
-              <option value=">=">{isTR ? 'Büyük veya Eşit (≥)' : 'Greater or equal (≥)'}</option>
-              <option value="<">{isTR ? 'Küçüktür (<)' : 'Less than (<)'}</option>
-              <option value="<=">{isTR ? 'Küçük veya Eşit (≤)' : 'Less or equal (≤)'}</option>
-              <option value="between">{isTR ? 'Arasında (Between)' : 'Between'}</option>
+              {isNumericCol ? (
+                <>
+                  <option value="<">{isTR ? 'Küçüktür (<)' : 'Less than (<)'}</option>
+                  <option value="<=">{isTR ? 'Küçük veya Eşit (≤)' : 'Less or equal (≤)'}</option>
+                  <option value=">">{isTR ? 'Büyüktür (>)' : 'Greater than (>)'}</option>
+                  <option value=">=">{isTR ? 'Büyük veya Eşit (≥)' : 'Greater or equal (≥)'}</option>
+                  <option value="=">{isTR ? 'Eşittir (=)' : 'Equals (=)'}</option>
+                  <option value="<>">{isTR ? 'Eşit Değildir (≠)' : 'Does not equal (≠)'}</option>
+                  <option value="between">{isTR ? 'Arasında (Between)' : 'Between'}</option>
+                  <option value="contains">{isTR ? 'İçerir (Contains)' : 'Contains'}</option>
+                </>
+              ) : (
+                <>
+                  <option value="contains">{isTR ? 'İçerir (Contains)' : 'Contains'}</option>
+                  <option value="notcontains">
+                    {isTR ? 'İçermez (Does not contain)' : 'Does not contain'}
+                  </option>
+                  <option value="=">{isTR ? 'Eşittir (=)' : 'Equals (=)'}</option>
+                  <option value="<>">{isTR ? 'Eşit Değildir (≠)' : 'Does not equal (≠)'}</option>
+                  <option value="startswith">{isTR ? 'İle Başlar (Starts with)' : 'Starts with'}</option>
+                  <option value="endswith">{isTR ? 'İle Biter (Ends with)' : 'Ends with'}</option>
+                  <option value=">">{isTR ? 'Büyüktür (>)' : 'Greater than (>)'}</option>
+                  <option value=">=">{isTR ? 'Büyük veya Eşit (≥)' : 'Greater or equal (≥)'}</option>
+                  <option value="<">{isTR ? 'Küçüktür (<)' : 'Less than (<)'}</option>
+                  <option value="<=">{isTR ? 'Küçük veya Eşit (≤)' : 'Less or equal (≤)'}</option>
+                  <option value="between">{isTR ? 'Arasında (Between)' : 'Between'}</option>
+                </>
+              )}
             </select>
           </div>
 
           <div>
             <label style={{ display: 'block', fontSize: 11, color: '#8E8E93', marginBottom: 4 }}>
-              {operator === 'between' ? (isTR ? 'Başlangıç Değeri' : 'Minimum Value') : isTR ? 'Değer' : 'Value'}
+              {operator === 'between'
+                ? isTR
+                  ? 'Başlangıç Değeri'
+                  : 'Minimum Value'
+                : isTR
+                ? 'Değer'
+                : 'Value'}
             </label>
-            <input
-              type="text"
-              value={condVal1}
-              onChange={(e) => setCondVal1(e.target.value)}
-              placeholder={isTR ? 'Değer girin...' : 'Enter value...'}
-              style={{
-                width: '100%',
-                padding: '6px 8px',
-                backgroundColor: theme.dom.inputBg,
-                color: theme.dom.inputText,
-                border: `1px solid ${theme.dom.inputBorder}`,
-                borderRadius: 5,
-                outline: 'none',
-                fontSize: 12,
-                boxSizing: 'border-box',
-              }}
-            />
+            {renderStructuredConditionInput(
+              condVal1,
+              setCondVal1,
+              isTR ? 'Değer girin...' : 'Enter value...',
+              condInputRef
+            )}
           </div>
 
           {operator === 'between' && (
@@ -557,23 +1076,37 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
               <label style={{ display: 'block', fontSize: 11, color: '#8E8E93', marginBottom: 4 }}>
                 {isTR ? 'Bitiş Değeri' : 'Maximum Value'}
               </label>
-              <input
-                type="text"
-                value={condVal2}
-                onChange={(e) => setCondVal2(e.target.value)}
-                placeholder={isTR ? 'Maksimum değer...' : 'Enter max value...'}
-                style={{
-                  width: '100%',
-                  padding: '6px 8px',
-                  backgroundColor: theme.dom.inputBg,
-                  color: theme.dom.inputText,
-                  border: `1px solid ${theme.dom.inputBorder}`,
-                  borderRadius: 5,
-                  outline: 'none',
-                  fontSize: 12,
-                  boxSizing: 'border-box',
-                }}
-              />
+              {renderStructuredConditionInput(
+                condVal2,
+                setCondVal2,
+                isTR ? 'Maksimum değer...' : 'Enter max value...'
+              )}
+            </div>
+          )}
+
+          {/* Live Matching Rows Feedback */}
+          {conditionMatchCount && (
+            <div
+              style={{
+                padding: '6px 10px',
+                borderRadius: 6,
+                backgroundColor:
+                  conditionMatchCount.matched > 0
+                    ? 'rgba(16, 185, 129, 0.12)'
+                    : 'rgba(245, 158, 11, 0.14)',
+                color: conditionMatchCount.matched > 0 ? '#10B981' : '#F59E0B',
+                fontSize: 11.5,
+                fontWeight: 600,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span>{isTR ? 'Eşleşen Kayıt:' : 'Matching Rows:'}</span>
+              <span>
+                {conditionMatchCount.matched.toLocaleString(locale.code)} /{' '}
+                {conditionMatchCount.total.toLocaleString(locale.code)}
+              </span>
             </div>
           )}
         </div>
@@ -601,7 +1134,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
             borderRadius: 5,
             cursor: 'pointer',
             fontSize: 11,
-            fontWeight: 500,
+            fontWeight: 600,
           }}
         >
           {locale.clear}

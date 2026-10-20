@@ -36,6 +36,7 @@ export class LocalDataStore implements IDataStore {
   private dirtyCells = new Map<any, Set<string>>();
   private insertedKeys = new Set<any>();
   private deletedRows = new Map<any, { data: Record<string, any>; index: number }>();
+  private distinctCache = new Map<string, DistinctItem[]>();
 
   private listeners = new Map<string, Set<(...args: any[]) => void>>();
 
@@ -78,6 +79,7 @@ export class LocalDataStore implements IDataStore {
     this.dirtyCells.clear();
     this.insertedKeys.clear();
     this.deletedRows.clear();
+    this.distinctCache.clear();
 
     this.recompute();
   }
@@ -169,6 +171,16 @@ export class LocalDataStore implements IDataStore {
       }
       return true;
     }
+    if (
+      a &&
+      b &&
+      typeof a === 'object' &&
+      typeof b === 'object' &&
+      !Array.isArray(a) &&
+      !Array.isArray(b)
+    ) {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
     return false;
   }
 
@@ -176,7 +188,11 @@ export class LocalDataStore implements IDataStore {
     if (!this.originalRowSnapshots.has(rowKey) && !this.insertedKeys.has(rowKey)) {
       const snap: Record<string, any> = {};
       for (const [k, v] of Object.entries(item)) {
-        snap[k] = Array.isArray(v) ? [...v] : v;
+        snap[k] = Array.isArray(v)
+          ? [...v]
+          : v && typeof v === 'object'
+          ? { ...v }
+          : v;
       }
       this.originalRowSnapshots.set(rowKey, snap);
     }
@@ -209,6 +225,8 @@ export class LocalDataStore implements IDataStore {
         this.markCellDirty(rowKey, columnId, value);
       }
       item[columnId] = Array.isArray(value) ? [...value] : value;
+      delete item.__searchIndex;
+      this.distinctCache.delete(columnId);
       this.recompute();
     }
     return Promise.resolve();
@@ -232,6 +250,8 @@ export class LocalDataStore implements IDataStore {
           this.markCellDirty(u.rowKey, u.columnId, u.value);
         }
         item[u.columnId] = u.value;
+        delete item.__searchIndex;
+        this.distinctCache.delete(u.columnId);
         changed = true;
       }
     }
@@ -252,7 +272,9 @@ export class LocalDataStore implements IDataStore {
           this.markCellDirty(rowKey, colId, val);
         }
         item[colId] = val;
+        this.distinctCache.delete(colId);
       }
+      delete item.__searchIndex;
       this.recompute();
     }
     return Promise.resolve();
@@ -402,6 +424,13 @@ export class LocalDataStore implements IDataStore {
     return this.dirtyCells.get(rowKey)?.has(columnId) ?? false;
   }
 
+  public isColumnDirty(columnId: string): boolean {
+    for (const cols of this.dirtyCells.values()) {
+      if (cols.has(columnId)) return true;
+    }
+    return false;
+  }
+
   public isRowInserted(rowKey: any): boolean {
     return this.insertedKeys.has(rowKey);
   }
@@ -484,6 +513,7 @@ export class LocalDataStore implements IDataStore {
     this.dirtyCells.clear();
     this.insertedKeys.clear();
     this.deletedRows.clear();
+    this.distinctCache.clear();
 
     this.recompute();
   }
@@ -517,47 +547,65 @@ export class LocalDataStore implements IDataStore {
   }
 
   public async getDistinctValues(columnId: string, search?: string): Promise<DistinctItem[]> {
-    const counts = new Map<any, number>();
-    let blankCount = 0;
+    let baseItems = this.distinctCache.get(columnId);
 
-    for (let i = 0; i < this.rawData.length; i++) {
-      const val = this.rawData[i][columnId];
-      if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
-        blankCount++;
-      } else if (Array.isArray(val)) {
-        // For multiselect arrays, count each tag element individually so filter checkboxes show individual choices
-        for (const elem of val) {
-          if (elem !== undefined && elem !== null && elem !== '') {
-            counts.set(elem, (counts.get(elem) || 0) + 1);
+    if (!baseItems) {
+      const counts = new Map<any, number>();
+      let blankCount = 0;
+
+      for (let i = 0; i < this.rawData.length; i++) {
+        const val = this.rawData[i][columnId];
+        if (
+          val === undefined ||
+          val === null ||
+          val === '' ||
+          (Array.isArray(val) && val.length === 0) ||
+          (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0)
+        ) {
+          blankCount++;
+        } else if (Array.isArray(val)) {
+          for (const elem of val) {
+            if (elem !== undefined && elem !== null && elem !== '') {
+              counts.set(elem, (counts.get(elem) || 0) + 1);
+            }
           }
+        } else if (typeof val === 'object') {
+          const formatted = Object.entries(val)
+            .map(([k, v]) => `${k}: ${String(v)}`)
+            .join(' • ');
+          counts.set(formatted, (counts.get(formatted) || 0) + 1);
+        } else {
+          counts.set(val, (counts.get(val) || 0) + 1);
         }
-      } else {
-        counts.set(val, (counts.get(val) || 0) + 1);
       }
-    }
 
-    let items: DistinctItem[] = Array.from(counts.entries()).map(([val, count]) => ({
-      value: val,
-      label: String(val),
-      count,
-    }));
+      baseItems = Array.from(counts.entries()).map(([val, count]) => ({
+        value: val,
+        label: String(val),
+        count,
+      }));
 
-    items.sort((a, b) => SortEngine.compareValues(a.value, b.value));
+      baseItems.sort((a, b) => SortEngine.compareValues(a.value, b.value));
 
-    if (blankCount > 0) {
-      items.unshift({
-        value: BLANK_FILTER_TOKEN,
-        label: '(Blank)',
-        count: blankCount,
-      });
+      if (blankCount > 0) {
+        baseItems.unshift({
+          value: BLANK_FILTER_TOKEN,
+          label: '(Blank)',
+          count: blankCount,
+        });
+      }
+
+      this.distinctCache.set(columnId, baseItems);
     }
 
     if (search) {
-      const s = search.toLowerCase();
-      items = items.filter((it) => it.label.toLowerCase().includes(s));
+      const s = search.toLowerCase().trim();
+      if (s) {
+        return Promise.resolve(baseItems.filter((it) => it.label.toLowerCase().includes(s)));
+      }
     }
 
-    return Promise.resolve(items);
+    return Promise.resolve(baseItems);
   }
 
   // ============================================================================
@@ -646,9 +694,12 @@ export class LocalDataStore implements IDataStore {
       filtered = filtered.filter((row) => FilterEngine.evaluateRow(row, this.currentFilter));
     }
 
-    // 2. Global Search
+    // 2. Global Search (Fast Lowercase Pre-Indexed Substring Search)
     if (this.currentSearch) {
-      filtered = filtered.filter((row) => FilterEngine.matchSearch(row, this.currentSearch));
+      const cleanKeyword = this.currentSearch.toLowerCase().trim();
+      if (cleanKeyword) {
+        filtered = filtered.filter((row) => FilterEngine.matchSearch(row, cleanKeyword));
+      }
     }
 
     // 3. Multi-Sort

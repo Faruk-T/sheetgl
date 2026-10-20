@@ -27,6 +27,7 @@ import { CanvasRenderer } from '../renderer/CanvasRenderer';
 import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
 import { ContextMenuOverlay, ContextMenuState } from '../overlays/ContextMenuOverlay';
+import { SparklineModalOverlay, SparklineModalState } from '../overlays/SparklineModalOverlay';
 import { ToolBar } from './ToolBar';
 import { FormulaBar } from './FormulaBar';
 import { SummaryFooter, SelectionSummaryStats } from './SummaryFooter';
@@ -100,7 +101,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   dataSource,
   columns: userColumns,
   theme: userTheme = 'apple-dark',
-  locale: userLocale = 'en',
+  locale: userLocale,
   rowHeight = 34,
   headerHeight = 38,
   initialSort = [],
@@ -241,6 +242,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     rect: { x: number; y: number; width: number; height: number };
   } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [sparklineModal, setSparklineModal] = useState<SparklineModalState | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'info' | 'warning' | 'success' } | null>(null);
 
   // Hover & Drag States
@@ -466,7 +468,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
 
       // 1. Column Validator Check
       if (colDef.validator) {
-        const valRes = colDef.validator(newValue, rowData);
+        const rawRes = colDef.validator(newValue, rowData, colDef);
+        const valRes = rawRes instanceof Promise ? await rawRes : rawRes;
         if (valRes === false || (typeof valRes === 'object' && !valRes.valid)) {
           const msg =
             typeof valRes === 'object' && valRes.message
@@ -1128,6 +1131,10 @@ export const SheetGL: React.FC<SheetGLProps> = ({
 
   const handleToggleGroupColumn = (colId: string) => {
     if (permissions.allowGrouping === false) return;
+    const targetCol = columns.find((c) => c.id === colId);
+    if (targetCol && (targetCol.type === 'sparkline' || targetCol.type === 'action' || targetCol.groupable === false)) {
+      return;
+    }
     setGroups((prevGroups) => {
       const exists = prevGroups.some((g) => g.selector === colId);
       const nextGroups = exists
@@ -1159,21 +1166,55 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   };
 
   const handleApplyColumnFilter = (colId: string, filterState: ColumnFilterState | null) => {
-    setColumnFilters((prev) => {
-      const next = { ...prev };
-      if (!filterState) {
-        delete next[colId];
-      } else {
-        next[colId] = filterState;
-      }
-      store.setFilter(compileColumnFilters(next));
-      return next;
-    });
+    const next = { ...columnFilters };
+    if (!filterState) {
+      delete next[colId];
+    } else {
+      next[colId] = filterState;
+    }
+    setColumnFilters(next);
+
+    const compiled = compileColumnFilters(next);
+    store.setFilter(compiled);
+
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+    scrollPosRef.current.top = 0;
+
+    const maxR = Math.max(0, store.getRowCount() - 1);
+    const activeCol = selectionRef.current.activeCell.col;
+    selectionRef.current.setActiveCell(Math.min(selectionRef.current.activeCell.row, maxR), activeCol);
+
+    setStoreVersion((v) => v + 1);
+    requestRender();
+
+    const matchedCount = store.getRowCount();
+    const isTR = currentLocale.code.startsWith('tr');
+    if (filterState) {
+      showToast(
+        isTR
+          ? `🔍 Filtre uygulandı: ${matchedCount.toLocaleString('tr-TR')} kayıt listeleniyor.`
+          : `🔍 Filter applied: ${matchedCount.toLocaleString('en-US')} matching rows.`,
+        'info'
+      );
+    } else {
+      showToast(
+        isTR ? '🧹 Sütun filtresi temizlendi.' : '🧹 Column filter cleared.',
+        'info'
+      );
+    }
   };
 
   const handleClearAllFilters = () => {
     setColumnFilters({});
     store.setFilter(null);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+    scrollPosRef.current.top = 0;
+    setStoreVersion((v) => v + 1);
+    requestRender();
   };
 
   const handleUpdateColumnDef = (colId: string, patch: Partial<ColumnDef>) => {
@@ -1459,6 +1500,16 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     const vRow = store.getViewRow(row);
     if (!vRow || vRow.type === 'group') return;
 
+    if (colDef?.type === 'sparkline') {
+      setSparklineModal({
+        rowIndex: row,
+        rowData: vRow.data,
+        column: colDef,
+        points: Array.isArray(vRow.data[colDef.id]) ? vRow.data[colDef.id] : [],
+      });
+      return;
+    }
+
     if (!canEditCell(vRow.data, colDef, row, false)) return;
 
     const plugin = ColumnTypeRegistry.get(colDef.type);
@@ -1552,11 +1603,21 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       }
     }
 
-    // 3. Check Fill Handle / Right Duplicate Button Hover
-    const fhHit = geom.hitTestFillHandle(x, y, sl, st, selectionRef.current);
-    if (fhHit) {
-      setCursorStyle(fhHit === 'corner' ? 'crosshair' : 'copy');
-      return;
+    // 3. Check Fill Handle / Right Duplicate Button Hover (Skip for sparkline / action / readonly)
+    const normForHover = selectionRef.current.getNormalizedRange();
+    const activeColForHover = geom.columns[normForHover.maxCol];
+    const isSpecialNonDup =
+      !activeColForHover ||
+      activeColForHover.type === 'sparkline' ||
+      activeColForHover.type === 'action' ||
+      CanvasRenderer.isColumnReadonly(activeColForHover, permissions);
+
+    if (!isSpecialNonDup) {
+      const fhHit = geom.hitTestFillHandle(x, y, sl, st, selectionRef.current);
+      if (fhHit) {
+        setCursorStyle(fhHit === 'corner' ? 'crosshair' : 'copy');
+        return;
+      }
     }
 
     // 4. Check Row Number Gutter
@@ -1654,7 +1715,16 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     }
 
     // D. Fill Handle or Right-Side Cell Duplicate Handle
+    const normForDup = selectionRef.current.getNormalizedRange();
+    const activeColForDup = geom.columns[normForDup.maxCol];
+    const isSpecialNonDupCol =
+      !activeColForDup ||
+      activeColForDup.type === 'sparkline' ||
+      activeColForDup.type === 'action' ||
+      CanvasRenderer.isColumnReadonly(activeColForDup, permissions);
+
     const canDup =
+      !isSpecialNonDupCol &&
       permissions.mode !== 'read' &&
       permissions.mode !== 'readonly' &&
       permissions.allowUpdating !== false &&
@@ -1712,6 +1782,21 @@ export const SheetGL: React.FC<SheetGLProps> = ({
 
     const colDef = geom.columns[hit.col];
     const plugin = ColumnTypeRegistry.get(colDef.type);
+
+    // Clicking the expand icon (or clicking a sparkline cell) opens the Detailed Trend Chart Modal
+    if (colDef.type === 'sparkline' && vRow && vRow.type === 'data') {
+      if (hit.localX > colDef.width - 28) {
+        setIsDraggingSelection(false);
+        setSparklineModal({
+          rowIndex: hit.row,
+          rowData: vRow.data,
+          column: colDef,
+          points: Array.isArray(vRow.data[colDef.id]) ? vRow.data[colDef.id] : [],
+        });
+        requestRender();
+        return;
+      }
+    }
 
     if (plugin.onPointerDown && vRow && vRow.type === 'data') {
       // Action column works even in read mode; mutable plugins check canEditCell
@@ -2020,6 +2105,9 @@ export const SheetGL: React.FC<SheetGLProps> = ({
 
   const handleCopy = (e: React.ClipboardEvent) => {
     if (activeOverlay) return;
+    const { col } = selectionRef.current.activeCell;
+    const colDef = geometryRef.current.columns[col];
+    if (colDef?.type === 'sparkline') return;
     e.preventDefault();
     const tsv = buildSelectedTsv();
     internalClipboardRef.current = tsv;
@@ -2379,6 +2467,18 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         onDuplicateDown={handleDuplicateCellDown}
         onDuplicateRight={handleDuplicateCellRight}
         onDuplicateRow={() => handleDuplicateRow(selectedCellUI.row)}
+        onOpenSparklineModal={() => {
+          if (currentColumn?.type === 'sparkline' && activeViewRow && activeViewRow.type === 'data') {
+            setSparklineModal({
+              rowIndex: selectedCellUI.row,
+              rowData: activeViewRow.data,
+              column: currentColumn,
+              points: Array.isArray(activeViewRow.data[currentColumn.id])
+                ? activeViewRow.data[currentColumn.id]
+                : [],
+            });
+          }
+        }}
         theme={resolvedTheme}
         locale={currentLocale}
       />
@@ -2734,7 +2834,32 @@ export const SheetGL: React.FC<SheetGLProps> = ({
                 handleChangeSummaryType(contextMenu.column.id, sType);
               }
             }}
+            onOpenSparklineModal={() => {
+              if (contextMenu.column?.type === 'sparkline' && contextMenu.rowData) {
+                setSparklineModal({
+                  rowIndex: contextMenu.row,
+                  rowData: contextMenu.rowData,
+                  column: contextMenu.column,
+                  points: Array.isArray(contextMenu.rowData[contextMenu.column.id])
+                    ? contextMenu.rowData[contextMenu.column.id]
+                    : [],
+                });
+              }
+            }}
             onClose={() => setContextMenu(null)}
+          />
+        )}
+
+        {/* 6b. DETAILED SPARKLINE TREND CHART MODAL DIALOG */}
+        {sparklineModal && (
+          <SparklineModalOverlay
+            modal={sparklineModal}
+            theme={resolvedTheme}
+            locale={currentLocale}
+            onClose={() => {
+              setSparklineModal(null);
+              containerRef.current?.focus();
+            }}
           />
         )}
       </div>

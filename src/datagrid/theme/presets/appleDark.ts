@@ -1,9 +1,9 @@
-import { IGridThemeTokens } from '../IGridTheme';
+﻿import { IGridThemeTokens } from '../IGridTheme';
 
 export const appleDark: IGridThemeTokens = {
   name: 'apple-dark',
   isDark: true,
-  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif',
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   fontSize: 13,
   headerFontSize: 12,
   fontFeatureSettings: '"tnum"',
