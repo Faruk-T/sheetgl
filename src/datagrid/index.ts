@@ -1,5 +1,7 @@
 export { SheetGL } from './ui/SheetGL';
 export type { SheetGLProps } from './ui/SheetGL';
+export { SheetGLLogo } from './ui/SheetGLLogo';
+export type { SheetGLLogoProps } from './ui/SheetGLLogo';
 
 export { LocalDataStore } from './data/LocalDataStore';
 export { RemoteDataStore } from './data/RemoteDataStore';

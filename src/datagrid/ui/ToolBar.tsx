@@ -4,6 +4,7 @@ import { ThemeInput } from '../theme/ThemeEngine';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { ColumnDef, GridPermissions } from '../types/grid';
 import { SummaryType } from '../types/group';
+import { SheetGLLogo } from './SheetGLLogo';
 
 export interface ToolBarProps {
   rowCount: number;
@@ -142,16 +143,20 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       >
         {/* Left: Brand + Row Stats + CRUD + Undo/Redo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 800, fontSize: 13, userSelect: 'none' }}>
+            <SheetGLLogo size={18} glow={!isReadonlyMode} />
+            <span style={{ letterSpacing: '-0.01em' }}>SheetGL</span>
             <span
               style={{
-                width: 8,
-                height: 8,
+                width: 6,
+                height: 6,
                 borderRadius: '50%',
                 backgroundColor: isReadonlyMode ? '#FF9F0A' : '#30D158',
+                boxShadow: isReadonlyMode ? '0 0 6px #FF9F0A' : '0 0 6px #30D158',
+                marginLeft: -1,
               }}
+              title={isReadonlyMode ? 'ReadOnly' : 'Live / Write'}
             />
-            <span>SheetGL</span>
           </div>
 
           <span
