@@ -1,0 +1,38 @@
+{
+  "name": "sheetgl",
+  "version": "1.0.0",
+  "description": "High-performance Canvas-based DataGrid for React combining Google Sheets speed with DevExtreme enterprise features. Zero dependencies, MIT licensed.",
+  "license": "MIT",
+  "keywords": [
+    "datagrid",
+    "canvas",
+    "react",
+    "spreadsheet",
+    "google-sheets",
+    "devextreme-alternative",
+    "virtualized-grid",
+    "data-table",
+    "high-performance"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lucide-react": "^1.60.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.88.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4"
+  }
+}

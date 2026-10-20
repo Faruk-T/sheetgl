@@ -1,0 +1,152 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { CellEditorProps } from '../../IColumnTypePlugin';
+import { SelectOption } from '../../../types/grid';
+
+export const SelectEditor: React.FC<CellEditorProps<string>> = ({
+  value,
+  column,
+  rect,
+  theme,
+  locale,
+  initialChar,
+  onCommit,
+  onCancel,
+}) => {
+  const options = column.options || [];
+  const [search, setSearch] = useState<string>(initialChar || '');
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const filtered = options.filter(
+    (o) =>
+      o.label.toLowerCase().includes(search.toLowerCase()) ||
+      o.value.toLowerCase().includes(search.toLowerCase())
+  );
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtered[highlightedIndex]) {
+        onCommit(filtered[highlightedIndex].value, 'down');
+      } else {
+        onCancel();
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      if (filtered[highlightedIndex]) {
+        onCommit(filtered[highlightedIndex].value, e.shiftKey ? 'left' : 'right');
+      } else {
+        onCancel();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onCancel();
+    }
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: 'absolute',
+        left: rect.x,
+        top: rect.y,
+        minWidth: Math.max(rect.width, 180),
+        zIndex: 100,
+        backgroundColor: theme.dom.popoverBg,
+        color: theme.dom.popoverText,
+        border: `1px solid ${theme.dom.popoverBorder}`,
+        borderRadius: 8,
+        boxShadow: theme.dom.popoverShadow,
+        backdropFilter: theme.dom.glassBackdrop,
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ padding: 6, borderBottom: `1px solid ${theme.dom.popoverBorder}` }}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setHighlightedIndex(0);
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={locale?.searchValuesPlaceholder || 'Search values...'}
+          style={{
+            width: '100%',
+            padding: '5px 8px',
+            backgroundColor: theme.dom.inputBg,
+            color: theme.dom.inputText,
+            border: `1px solid ${theme.dom.inputBorder}`,
+            borderRadius: 4,
+            outline: 'none',
+            fontSize: 12,
+            fontFamily: theme.fontFamily,
+          }}
+        />
+      </div>
+
+      <div style={{ maxHeight: 180, overflowY: 'auto', padding: 4 }}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: '8px 12px', fontSize: 12, color: '#8E8E93' }}>
+            {locale?.noMatches || 'No matching records'}
+          </div>
+        ) : (
+          filtered.map((opt, i) => {
+            const isSelected = opt.value === value;
+            const isHigh = i === highlightedIndex;
+            return (
+              <div
+                key={opt.value}
+                onMouseDown={() => onCommit(opt.value, 'none')}
+                onMouseEnter={() => setHighlightedIndex(i)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 10px',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  backgroundColor: isHigh
+                    ? theme.isDark
+                      ? 'rgba(255,255,255,0.08)'
+                      : 'rgba(0,0,0,0.05)'
+                    : 'transparent',
+                  fontSize: 12,
+                  fontFamily: theme.fontFamily,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {(opt.bg || opt.darkFg) && (
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: theme.isDark ? (opt.darkFg || '#60A5FA') : (opt.fg || opt.bg || '#3B82F6'),
+                      }}
+                    />
+                  )}
+                  <span>{opt.label}</span>
+                </div>
+                {isSelected && <span style={{ color: theme.dom.accentColor, fontWeight: 700 }}>✓</span>}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
