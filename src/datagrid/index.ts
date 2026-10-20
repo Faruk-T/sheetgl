@@ -18,10 +18,31 @@ export { appleDark } from './theme/presets/appleDark';
 export { googleLight } from './theme/presets/googleLight';
 export { googleDark } from './theme/presets/googleDark';
 
-export type { ColumnDef, ColumnType, SelectOption, CellCoords, CellRange } from './types/grid';
-export type { IDataStore, DataGridQuery, LoadResult, RemoteOperationsConfig } from './types/store';
-export type { FilterDescriptor, SortDescriptor, DistinctItem, FilterOperation } from './types/filter';
-export type { GroupDescriptor, VirtualRow, SummaryDescriptor } from './types/group';
+export type {
+  ColumnDef,
+  ColumnType,
+  ColumnPermission,
+  GridPermissions,
+  SelectOption,
+  CellCoords,
+  CellRange,
+  CascadingUpdateContext,
+  EditingStartEvent,
+  CellValueChangingEvent,
+  CellValueChangedEvent,
+  RowInsertingEvent,
+  RowInsertedEvent,
+  RowUpdatingEvent,
+  RowUpdatedEvent,
+  RowRemovingEvent,
+  RowRemovedEvent,
+  SavingEvent,
+  SavedEvent,
+  GridEventLogEntry,
+} from './types/grid';
+export type { IDataStore, DataGridQuery, LoadResult, RemoteOperationsConfig, BatchChanges } from './types/store';
+export type { FilterDescriptor, SortDescriptor, DistinctItem, FilterOperation, ColumnFilterState } from './types/filter';
+export type { GroupDescriptor, VirtualRow, SummaryDescriptor, SummaryType } from './types/group';
 
 export { LocaleEngine } from './i18n/LocaleEngine';
 export type { IGridLocale } from './i18n/IGridLocale';

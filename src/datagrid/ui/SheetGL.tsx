@@ -1,8 +1,23 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { ColumnDef, ActiveOverlayState } from '../types/grid';
-import { IDataStore } from '../types/store';
-import { SortDescriptor } from '../types/filter';
-import { GroupDescriptor } from '../types/group';
+import {
+  ColumnDef,
+  ActiveOverlayState,
+  GridPermissions,
+  EditingStartEvent,
+  CellValueChangingEvent,
+  CellValueChangedEvent,
+  RowInsertingEvent,
+  RowInsertedEvent,
+  RowUpdatingEvent,
+  RowUpdatedEvent,
+  RowRemovingEvent,
+  RowRemovedEvent,
+  SavingEvent,
+  SavedEvent,
+} from '../types/grid';
+import { IDataStore, BatchChanges } from '../types/store';
+import { ColumnFilterState, FilterDescriptor, SortDescriptor } from '../types/filter';
+import { GroupDescriptor, SummaryType } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
 import { GeometryEngine } from '../core/GeometryEngine';
@@ -11,9 +26,10 @@ import { HistoryManager } from '../core/HistoryManager';
 import { CanvasRenderer } from '../renderer/CanvasRenderer';
 import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
+import { ContextMenuOverlay, ContextMenuState } from '../overlays/ContextMenuOverlay';
 import { ToolBar } from './ToolBar';
 import { FormulaBar } from './FormulaBar';
-import { SummaryFooter } from './SummaryFooter';
+import { SummaryFooter, SelectionSummaryStats } from './SummaryFooter';
 import { LocalDataStore } from '../data/LocalDataStore';
 import { initDefaultColumnPlugins } from '../columns/initPlugins';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
@@ -28,42 +44,122 @@ export interface SheetGLProps {
   headerHeight?: number;
   initialSort?: SortDescriptor[];
   initialGroups?: GroupDescriptor[];
+  permissions?: GridPermissions;
+  batchEditMode?: boolean;
+  onPermissionsChange?: (permissions: GridPermissions) => void;
   onCellChange?: (row: any, columnId: string, value: any) => void;
+
+  // DevExtreme-Style Lifecycle Event Triggers
+  onEditingStart?: (e: EditingStartEvent) => void;
+  onCellValueChanging?: (e: CellValueChangingEvent) => void;
+  onCellValueChanged?: (
+    e: CellValueChangedEvent
+  ) => void | Record<string, any> | Promise<void | Record<string, any>>;
+  onRowInserting?: (e: RowInsertingEvent) => void | Promise<void>;
+  onRowInserted?: (e: RowInsertedEvent) => void;
+  onRowUpdating?: (e: RowUpdatingEvent) => void | Promise<void>;
+  onRowUpdated?: (e: RowUpdatedEvent) => void;
+  onRowRemoving?: (e: RowRemovingEvent) => void | Promise<void>;
+  onRowRemoved?: (e: RowRemovedEvent) => void;
+  onSaving?: (e: SavingEvent) => void | Promise<void>;
+  onSaved?: (e: SavedEvent) => void;
+
   style?: React.CSSProperties;
   className?: string;
+}
+
+function compileColumnFilters(map: Record<string, ColumnFilterState>): FilterDescriptor | null {
+  const states = Object.values(map);
+  if (states.length === 0) return null;
+
+  const singleFilters: FilterDescriptor[] = [];
+  for (const st of states) {
+    if (st.mode === 'values' && st.selectedValues) {
+      singleFilters.push([st.columnId, 'in', st.selectedValues]);
+    } else if (st.mode === 'condition' && st.operator) {
+      if (st.operator === 'between') {
+        singleFilters.push([st.columnId, 'between', [st.value1, st.value2]]);
+      } else {
+        singleFilters.push([st.columnId, st.operator, st.value1]);
+      }
+    }
+  }
+
+  if (singleFilters.length === 0) return null;
+  if (singleFilters.length === 1) return singleFilters[0];
+
+  const composite: any[] = [];
+  singleFilters.forEach((f, idx) => {
+    if (idx > 0) composite.push('and');
+    composite.push(f);
+  });
+  return composite;
 }
 
 export const SheetGL: React.FC<SheetGLProps> = ({
   dataSource,
   columns: userColumns,
-  theme: userTheme = 'apple-light',
+  theme: userTheme = 'apple-dark',
   locale: userLocale = 'en',
   rowHeight = 34,
   headerHeight = 38,
   initialSort = [],
   initialGroups = [],
+  permissions: userPermissions,
+  batchEditMode = true,
+  onPermissionsChange,
   onCellChange,
+  onEditingStart,
+  onCellValueChanging,
+  onCellValueChanged,
+  onRowInserting,
+  onRowInserted,
+  onRowUpdating,
+  onRowUpdated,
+  onRowRemoving,
+  onRowRemoved,
+  onSaving,
+  onSaved,
   style,
   className,
 }) => {
-  // 1. Eklentileri Başlat
-  useEffect(() => {
+  // 1. Initialize Default Column Plugins synchronously on first render
+  useMemo(() => {
     initDefaultColumnPlugins();
   }, []);
 
-  // 2. DataStore Adaptasyonu
+  // 2. DataStore Adaptation
   const store = useMemo<IDataStore>(() => {
     if (Array.isArray(dataSource)) {
-      return new LocalDataStore({ data: dataSource, keyField: 'id' });
+      const initialSummaries: Record<string, SummaryType> = {};
+      userColumns.forEach((c) => {
+        if (c.summaryType) {
+          initialSummaries[c.id] = c.summaryType;
+        }
+      });
+      return new LocalDataStore({
+        data: dataSource,
+        keyField: 'id',
+        batchMode: batchEditMode,
+        initialSummaries: Object.keys(initialSummaries).length > 0 ? initialSummaries : undefined,
+      });
     }
     return dataSource;
   }, [dataSource]);
 
-  // 3. Tema Çözümleme
+  useEffect(() => {
+    store.setBatchMode?.(batchEditMode);
+  }, [store, batchEditMode]);
+
+  // 3. Theme Resolution
   const [currentThemeName, setCurrentThemeName] = useState<ThemeInput>(userTheme);
   const [resolvedTheme, setResolvedTheme] = useState<IGridThemeTokens>(() =>
     ThemeEngine.resolve(userTheme)
   );
+
+  useEffect(() => {
+    setCurrentThemeName(userTheme);
+  }, [userTheme]);
 
   useEffect(() => {
     setResolvedTheme(ThemeEngine.resolve(currentThemeName));
@@ -75,7 +171,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     }
   }, [currentThemeName]);
 
-  // 3b. Dil Çözümleme (i18n)
+  // 3b. Locale Resolution (i18n)
   const [currentLocale, setCurrentLocale] = useState<IGridLocale>(() =>
     LocaleEngine.resolve(userLocale)
   );
@@ -86,56 +182,138 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     }
   }, [userLocale]);
 
-  // 4. Çekirdek Motorlar
+  // 3c. Permissions State
+  const [permissions, setPermissions] = useState<GridPermissions>(
+    userPermissions || {
+      mode: 'write',
+      allowAdding: true,
+      allowUpdating: true,
+      allowDeleting: true,
+      allowDuplicating: true,
+      allowClipboardPaste: true,
+      allowExport: true,
+      allowFiltering: true,
+      allowSorting: true,
+      allowGrouping: true,
+      allowBatchSave: true,
+    }
+  );
+
+  useEffect(() => {
+    if (userPermissions) {
+      setPermissions(userPermissions);
+    }
+  }, [userPermissions]);
+
+  const handleUpdatePermissions = (next: GridPermissions) => {
+    setPermissions(next);
+    onPermissionsChange?.(next);
+  };
+
+  // 4. Core Engines
   const [columns, setColumns] = useState<ColumnDef[]>(userColumns);
+  useEffect(() => {
+    setColumns(userColumns);
+  }, [userColumns]);
+
   const geometryRef = useRef<GeometryEngine>(
     new GeometryEngine(userColumns, rowHeight, headerHeight)
   );
   const selectionRef = useRef<SelectionModel>(new SelectionModel());
-  const historyRef = useRef<HistoryManager>(new HistoryManager(50));
+  const historyRef = useRef<HistoryManager>(new HistoryManager(100));
 
-  // Geometri güncelleme
   useEffect(() => {
     geometryRef.current.rowHeight = rowHeight;
     geometryRef.current.headerHeight = headerHeight;
     geometryRef.current.setColumns(columns);
   }, [columns, rowHeight, headerHeight]);
 
-  // 5. State Yönetimi
+  // 5. UI State Management
   const [sortRules, setSortRules] = useState<SortDescriptor[]>(initialSort);
   const [groups, setGroups] = useState<GroupDescriptor[]>(initialGroups);
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterState>>({});
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [selectedCellUI, setSelectedCellUI] = useState<{ row: number; col: number }>({ row: 0, col: 0 });
+  const [selectionVersion, setSelectionVersion] = useState<number>(0);
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlayState | null>(null);
   const [headerFilterState, setHeaderFilterState] = useState<{
     column: ColumnDef;
     rect: { x: number; y: number; width: number; height: number };
   } | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'info' | 'warning' | 'success' } | null>(null);
 
-  // Sütun genişletme (Resize) sürükleme durumu
-  const [resizingCol, setResizingCol] = useState<{ colIndex: number; startX: number; initialWidth: number } | null>(null);
+  // Hover & Drag States
+  const hoveredCellRef = useRef<{ row: number; col: number } | null>(null);
+  const hoveredFilterColRef = useRef<number | null>(null);
+  const [cursorStyle, setCursorStyle] = useState<string>('cell');
+  const [resizingCol, setResizingCol] = useState<{
+    colIndex: number;
+     colId: string;
+    startX: number;
+    initialWidth: number;
+  } | null>(null);
+  const [isDraggingSelection, setIsDraggingSelection] = useState<boolean>(false);
+  const [isDraggingRowNumbers, setIsDraggingRowNumbers] = useState<boolean>(false);
+  const [fillDragState, setFillDragState] = useState<{
+    mode: 'corner' | 'right-duplicate';
+    sourceRange: { minRow: number; maxRow: number; minCol: number; maxCol: number };
+    targetRange: { minRow: number; maxRow: number; minCol: number; maxCol: number };
+  } | null>(null);
 
-  // Scroll pozisyonu referansı
+  // Async Backend Cascading Row Loading Keys
+  const loadingRowKeysRef = useRef<Set<any>>(new Set());
+
+  // Right-side Scroll Indicator State
   const scrollPosRef = useRef<{ left: number; top: number }>({ left: 0, top: 0 });
+  const [scrollIndicator, setScrollIndicator] = useState<{ visible: boolean; row: number }>({
+    visible: false,
+    row: 1,
+  });
+  const scrollHideTimerRef = useRef<number | null>(null);
 
-  // DOM Eleman Referansları
+  // Internal clipboard fallback for context menu Copy/Paste
+  const internalClipboardRef = useRef<string>('');
+
+  // DOM Element Refs
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridSurfaceRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Store olaylarını dinle
-  const [, setStoreVersion] = useState<number>(0);
+  const showToast = useCallback((text: string, type: 'info' | 'warning' | 'success' = 'info') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage((prev) => (prev?.text === text ? null : prev));
+    }, 2600);
+  }, []);
+
+  // Store listener
+  const [storeVersion, setStoreVersion] = useState<number>(0);
   useEffect(() => {
     const handleLoaded = () => {
       setStoreVersion((v) => v + 1);
-      requestRender();
     };
     store.on('loaded', handleLoaded);
     return () => store.off('loaded', handleLoaded);
   }, [store]);
 
-  // 6. 60 FPS Render Döngüsü
+  // Apply initialSort and initialGroups if provided
+  useEffect(() => {
+    if (initialSort.length > 0) {
+      store.setSorting(initialSort);
+    }
+    if (initialGroups.length > 0) {
+      store.setGrouping(initialGroups);
+    }
+  }, []);
+
+  const activeFilterColumnIds = useMemo(
+    () => new Set(Object.keys(columnFilters)),
+    [columnFilters]
+  );
+
+  // 6. 60 FPS Render Loop
   const requestRender = useCallback(() => {
     if (!canvasRef.current) return;
     requestAnimationFrame(() => {
@@ -151,37 +329,39 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         scrollTop: scrollPosRef.current.top,
         sortRules,
         searchKeyword,
+        hoveredCell: hoveredCellRef.current,
+        hoveredFilterColIndex: hoveredFilterColRef.current,
+        activeFilterColumnIds,
+        fillDragRange: fillDragState?.targetRange || null,
+        loadingRowKeys: loadingRowKeysRef.current,
+        permissions,
       });
     });
-  }, [store, resolvedTheme, currentLocale, sortRules, searchKeyword]);
+  }, [
+    store,
+    resolvedTheme,
+    currentLocale,
+    sortRules,
+    searchKeyword,
+    activeFilterColumnIds,
+    fillDragState,
+    permissions,
+  ]);
 
-  // Boyut, tema veya dil değişimlerinde çiz
   useEffect(() => {
     requestRender();
-  }, [requestRender, resolvedTheme, currentLocale]);
+  }, [requestRender, resolvedTheme, currentLocale, storeVersion, columns, selectionVersion]);
 
-  // 6b. Resize Observer & Ekran / Pencere Boyut Değişimi Takibi
+  // 6b. Resize Observer
   useEffect(() => {
-    const handleResize = () => {
-      requestRender();
-    };
-
+    const handleResize = () => requestRender();
     window.addEventListener('resize', handleResize);
 
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver(() => {
-        requestRender();
-      });
-      if (gridSurfaceRef.current) {
-        observer.observe(gridSurfaceRef.current);
-      }
-      if (containerRef.current) {
-        observer.observe(containerRef.current);
-      }
-      if (canvasRef.current) {
-        observer.observe(canvasRef.current);
-      }
+      observer = new ResizeObserver(() => requestRender());
+      if (gridSurfaceRef.current) observer.observe(gridSurfaceRef.current);
+      if (containerRef.current) observer.observe(containerRef.current);
     }
 
     return () => {
@@ -190,19 +370,733 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     };
   }, [requestRender]);
 
-  // 7. Sütun Sıralama (Çoklu Shift+Click Destekli)
-  const handleHeaderClick = (colIndex: number, isShift: boolean) => {
+  // ============================================================================
+  // PERMISSION & EDITABILITY CHECKER
+  // ============================================================================
+  const canEditCell = useCallback(
+    (row: Record<string, any> | undefined, colDef: ColumnDef | undefined, rowIndex: number = 0, silent: boolean = false): boolean => {
+      if (!colDef || !row) return false;
+      if (colDef.type === 'sparkline' || colDef.type === 'action') return false;
+
+      if (
+        permissions.mode === 'read' ||
+        permissions.mode === 'readonly' ||
+        permissions.allowUpdating === false
+      ) {
+        if (!silent) {
+          showToast(
+            currentLocale.code.startsWith('tr')
+              ? '🔒 Tablo şu anda Salt Okunur (Read-Only) modunda.'
+              : '🔒 Grid is currently in Read-Only permission mode.',
+            'warning'
+          );
+        }
+        return false;
+      }
+
+      if (colDef.readonly || colDef.permission === 'readonly' || colDef.permission === 'read') {
+        if (!silent) {
+          showToast(
+            currentLocale.code.startsWith('tr')
+              ? `🔒 "${colDef.title}" sütunu salt okunurdur (Read-Only).`
+              : `🔒 Column "${colDef.title}" is Read-Only.`,
+            'warning'
+          );
+        }
+        return false;
+      }
+
+      if (colDef.canEdit && !colDef.canEdit(row, colDef)) {
+        if (!silent) {
+          showToast(
+            currentLocale.code.startsWith('tr')
+              ? `🔒 Bu satır için "${colDef.title}" düzenlenemez.`
+              : `🔒 "${colDef.title}" is locked for this record.`,
+            'warning'
+          );
+        }
+        return false;
+      }
+
+      if (onEditingStart && !silent) {
+        const evt: EditingStartEvent = {
+          row,
+          rowKey: row.id ?? rowIndex,
+          rowIndex,
+          column: colDef,
+          value: row[colDef.id],
+          cancel: false,
+        };
+        onEditingStart(evt);
+        if (evt.cancel) {
+          showToast(
+            currentLocale.code.startsWith('tr')
+              ? `🔒 Düzenleme onEditingStart kuralı tarafından engellendi.`
+              : `🔒 Editing canceled by onEditingStart trigger.`,
+            'warning'
+          );
+          return false;
+        }
+      }
+
+      return true;
+    },
+    [permissions, onEditingStart, currentLocale, showToast]
+  );
+
+  // ============================================================================
+  // UNIFIED CELL MUTATION & DEVEXTREME CASCADING TRIGGER PIPELINE
+  // ============================================================================
+  const commitSingleCellEdit = useCallback(
+    async (
+      rowIndex: number,
+      colDef: ColumnDef,
+      newValue: any,
+      recordHistory: boolean = true
+    ): Promise<boolean> => {
+      const vRow = store.getViewRow(rowIndex);
+      if (!vRow || vRow.type !== 'data') return false;
+
+      const rowData = vRow.data;
+      const rowKey = rowData.id ?? rowIndex;
+      const oldValue = rowData[colDef.id];
+
+      if (oldValue === newValue) return true;
+      if (!canEditCell(rowData, colDef, rowIndex, false)) return false;
+
+      // 1. Column Validator Check
+      if (colDef.validator) {
+        const valRes = colDef.validator(newValue, rowData);
+        if (valRes === false || (typeof valRes === 'object' && !valRes.valid)) {
+          const msg =
+            typeof valRes === 'object' && valRes.message
+              ? valRes.message
+              : currentLocale.code.startsWith('tr')
+              ? 'Geçersiz hücre değeri!'
+              : 'Invalid cell value!';
+          showToast(`⚠️ ${msg}`, 'warning');
+          return false;
+        }
+      }
+
+      // 2. DevExtreme onCellValueChanging Trigger
+      let finalValue = newValue;
+      if (onCellValueChanging) {
+        const changingEvt: CellValueChangingEvent = {
+          row: rowData,
+          rowKey,
+          rowIndex,
+          column: colDef,
+          oldValue,
+          newValue,
+          cancel: false,
+        };
+        onCellValueChanging(changingEvt);
+        if (changingEvt.cancel) {
+          if (changingEvt.errorMessage) {
+            showToast(`⚠️ ${changingEvt.errorMessage}`, 'warning');
+          }
+          return false;
+        }
+        finalValue = changingEvt.newValue;
+      }
+
+      // 3. DevExtreme onRowUpdating Trigger
+      if (onRowUpdating) {
+        const rowUpdEvt: RowUpdatingEvent = {
+          key: rowKey,
+          oldData: { ...rowData },
+          newData: { [colDef.id]: finalValue },
+          cancel: false,
+        };
+        await onRowUpdating(rowUpdEvt);
+        if (rowUpdEvt.cancel) return false;
+      }
+
+      const prevRowSnapshot = { ...rowData };
+
+      // 4. Commit Primary Value
+      await store.setCell(rowKey, colDef.id, finalValue);
+      onCellChange?.(rowData, colDef.id, finalValue);
+
+      // 5. Cascading Column setCellValue & Async Backend Lookup Trigger
+      const cascadingPatch: Record<string, any> = {};
+      if (colDef.setCellValue) {
+        try {
+          loadingRowKeysRef.current.add(rowKey);
+          requestRender();
+
+          const draftNewData: Record<string, any> = {};
+          const maybePromise = colDef.setCellValue(draftNewData, finalValue, prevRowSnapshot, {
+            rowKey,
+            columnId: colDef.id,
+            store,
+          });
+
+          const resolvedPatch =
+            maybePromise instanceof Promise ? await maybePromise : maybePromise;
+
+          Object.assign(cascadingPatch, draftNewData, resolvedPatch || {});
+          if (Object.keys(cascadingPatch).length > 0) {
+            await store.updateRowFields?.(rowKey, cascadingPatch);
+          }
+        } finally {
+          loadingRowKeysRef.current.delete(rowKey);
+          requestRender();
+        }
+      }
+
+      // 6. DevExtreme onCellValueChanged Trigger (supports sync or async backend patch)
+      if (onCellValueChanged) {
+        try {
+          const changedEvt: CellValueChangedEvent = {
+            row: rowData,
+            rowKey,
+            rowIndex,
+            column: colDef,
+            oldValue,
+            newValue: finalValue,
+            updateRow: (patch) => {
+              Object.assign(cascadingPatch, patch);
+              store.updateRowFields?.(rowKey, patch);
+            },
+          };
+          const res = onCellValueChanged(changedEvt);
+          if (res instanceof Promise) {
+            loadingRowKeysRef.current.add(rowKey);
+            requestRender();
+            const asyncPatch = await res;
+            if (asyncPatch && typeof asyncPatch === 'object') {
+              Object.assign(cascadingPatch, asyncPatch);
+              await store.updateRowFields?.(rowKey, asyncPatch);
+            }
+            loadingRowKeysRef.current.delete(rowKey);
+          } else if (res && typeof res === 'object') {
+            Object.assign(cascadingPatch, res);
+            await store.updateRowFields?.(rowKey, res);
+          }
+        } catch {
+          loadingRowKeysRef.current.delete(rowKey);
+        }
+      }
+
+      // 7. Record Undo/Redo Command (including any cascading fields!)
+      if (recordHistory) {
+        const fullNewPatch: Record<string, any> = {
+          [colDef.id]: finalValue,
+          ...cascadingPatch,
+        };
+        const fullOldPatch: Record<string, any> = {};
+        for (const k of Object.keys(fullNewPatch)) {
+          fullOldPatch[k] = prevRowSnapshot[k];
+        }
+
+        historyRef.current.push({
+          description: `Edit ${colDef.title}`,
+          undo: () => {
+            store.updateRowFields?.(rowKey, fullOldPatch);
+            setStoreVersion((v) => v + 1);
+          },
+          redo: () => {
+            store.updateRowFields?.(rowKey, fullNewPatch);
+            setStoreVersion((v) => v + 1);
+          },
+        });
+      }
+
+      onRowUpdated?.({ key: rowKey, data: rowData });
+      setStoreVersion((v) => v + 1);
+      requestRender();
+      return true;
+    },
+    [
+      store,
+      canEditCell,
+      onCellValueChanging,
+      onRowUpdating,
+      onCellChange,
+      onCellValueChanged,
+      onRowUpdated,
+      currentLocale,
+      showToast,
+      requestRender,
+    ]
+  );
+
+  // ============================================================================
+  // BATCH RANGE MUTATION (FOR FILL HANDLE, DUPLICATE & PASTE)
+  // ============================================================================
+  const applyBatchCellUpdates = useCallback(
+    async (
+      updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }>,
+      description: string
+    ) => {
+      if (updates.length === 0) return;
+
+      const allowedUpdates: Array<{
+        rowIndex: number;
+        rowKey: any;
+        colDef: ColumnDef;
+        oldValue: any;
+        newValue: any;
+        rowData: Record<string, any>;
+      }> = [];
+
+      for (const u of updates) {
+        const vRow = store.getViewRow(u.rowIndex);
+        if (!vRow || vRow.type !== 'data') continue;
+        if (!canEditCell(vRow.data, u.colDef, u.rowIndex, true)) continue;
+        allowedUpdates.push({
+          ...u,
+          oldValue: vRow.data[u.colDef.id],
+          rowData: vRow.data,
+        });
+      }
+
+      if (allowedUpdates.length === 0) {
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? '🔒 Seçili hücreler salt okunur (Read-Only).'
+            : '🔒 Target cells are Read-Only.',
+          'warning'
+        );
+        return;
+      }
+
+      // If single cell, run through full cascading pipeline
+      if (allowedUpdates.length === 1) {
+        const single = allowedUpdates[0];
+        await commitSingleCellEdit(single.rowIndex, single.colDef, single.newValue, true);
+        return;
+      }
+
+      const forwardBatch = allowedUpdates.map((u) => ({
+        rowKey: u.rowKey,
+        columnId: u.colDef.id,
+        value: u.newValue,
+      }));
+      const backwardBatch = allowedUpdates.map((u) => ({
+        rowKey: u.rowKey,
+        columnId: u.colDef.id,
+        value: u.oldValue,
+      }));
+
+      if (store.setCellsBatch) {
+        await store.setCellsBatch(forwardBatch);
+      } else {
+        for (const f of forwardBatch) {
+          await store.setCell(f.rowKey, f.columnId, f.value);
+        }
+      }
+
+      // Also trigger cascading setCellValue for updated rows if any column defines setCellValue
+      for (const u of allowedUpdates) {
+        onCellChange?.(u.rowData, u.colDef.id, u.newValue);
+        if (u.colDef.setCellValue) {
+          const draft: Record<string, any> = {};
+          const res = u.colDef.setCellValue(draft, u.newValue, u.rowData, {
+            rowKey: u.rowKey,
+            columnId: u.colDef.id,
+            store,
+          });
+          if (res instanceof Promise) {
+            loadingRowKeysRef.current.add(u.rowKey);
+            res.then((patch) => {
+              const combined = { ...draft, ...(patch || {}) };
+              if (Object.keys(combined).length > 0) {
+                store.updateRowFields?.(u.rowKey, combined);
+              }
+              loadingRowKeysRef.current.delete(u.rowKey);
+              requestRender();
+            });
+          } else {
+            const combined = { ...draft, ...(res || {}) };
+            if (Object.keys(combined).length > 0) {
+              await store.updateRowFields?.(u.rowKey, combined);
+            }
+          }
+        }
+      }
+
+      historyRef.current.push({
+        description,
+        undo: () => {
+          store.setCellsBatch?.(backwardBatch);
+          setStoreVersion((v) => v + 1);
+        },
+        redo: () => {
+          store.setCellsBatch?.(forwardBatch);
+          setStoreVersion((v) => v + 1);
+        },
+      });
+
+      setStoreVersion((v) => v + 1);
+      requestRender();
+    },
+    [store, canEditCell, commitSingleCellEdit, onCellChange, currentLocale, showToast, requestRender]
+  );
+
+  // ============================================================================
+  // CRUD ROW ACTIONS (INSERT, DUPLICATE ROW, DELETE ROW, BATCH SAVE)
+  // ============================================================================
+  const handleInsertRow = useCallback(
+    async (targetRowIndex?: number) => {
+      if (
+        permissions.mode === 'read' ||
+        permissions.mode === 'readonly' ||
+        permissions.allowAdding === false
+      ) {
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? '🔒 Yeni satır ekleme yetkiniz kapalı.'
+            : '🔒 Row insertion is disabled by permissions.',
+          'warning'
+        );
+        return;
+      }
+
+      const defaultRow: Record<string, any> = {};
+      for (const col of columns) {
+        if (col.id === 'id') continue;
+        if (col.defaultValue !== undefined) {
+          defaultRow[col.id] = col.defaultValue;
+        } else if (col.type === 'number' || col.type === 'currency') {
+          defaultRow[col.id] = 0;
+        } else if (col.type === 'boolean') {
+          defaultRow[col.id] = false;
+        } else if (col.type === 'rating') {
+          defaultRow[col.id] = 3;
+        } else if (col.type === 'progress') {
+          defaultRow[col.id] = 50;
+        } else if (col.type === 'select') {
+          defaultRow[col.id] = col.options?.[0]?.value ?? '';
+        } else if (col.type === 'date') {
+          defaultRow[col.id] = new Date().toISOString().split('T')[0];
+        } else if (col.type === 'sparkline') {
+          defaultRow[col.id] = [25, 40, 35, 60, 55, 75, 85];
+        } else if (col.type === 'text') {
+          defaultRow[col.id] = col.id === 'company' ? 'New Enterprise Record' : col.id === 'city' ? 'New York' : col.id === 'category' ? 'Enterprise SaaS' : col.id === 'code' ? `ACC-${Math.floor(100000 + Math.random() * 900000)}` : '';
+        }
+      }
+
+      if (onRowInserting) {
+        const evt: RowInsertingEvent = {
+          data: defaultRow,
+          targetRowIndex,
+          cancel: false,
+        };
+        await onRowInserting(evt);
+        if (evt.cancel) return;
+      }
+
+      const created = await store.insertRow?.(defaultRow, targetRowIndex);
+      if (created) {
+        const newKey = created.id;
+        historyRef.current.push({
+          description: 'Insert Row',
+          undo: () => {
+            store.deleteRow?.(newKey);
+            setStoreVersion((v) => v + 1);
+          },
+          redo: () => {
+            store.restoreRow?.(created, 0);
+            setStoreVersion((v) => v + 1);
+          },
+        });
+        onRowInserted?.({ data: created, key: newKey });
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? `✨ Yeni satır eklendi (#${newKey})`
+            : `✨ New row inserted (#${newKey})`,
+          'success'
+        );
+        setStoreVersion((v) => v + 1);
+        requestRender();
+      }
+    },
+    [permissions, columns, onRowInserting, store, onRowInserted, currentLocale, showToast, requestRender]
+  );
+
+  const handleDuplicateRow = useCallback(
+    async (rowIndex?: number) => {
+      const targetIdx = rowIndex ?? selectionRef.current.activeCell.row;
+      const vRow = store.getViewRow(targetIdx);
+      if (!vRow || vRow.type !== 'data') return;
+
+      if (
+        permissions.mode === 'read' ||
+        permissions.mode === 'readonly' ||
+        permissions.allowDuplicating === false ||
+        permissions.allowAdding === false
+      ) {
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? '🔒 Satır çoğaltma yetkisi kapalı.'
+            : '🔒 Row duplication is disabled by permissions.',
+          'warning'
+        );
+        return;
+      }
+
+      const sourceKey = vRow.data.id ?? targetIdx;
+      const duplicated = await store.duplicateRow?.(sourceKey, targetIdx);
+      if (duplicated) {
+        const newKey = duplicated.id;
+        historyRef.current.push({
+          description: 'Duplicate Row',
+          undo: () => {
+            store.deleteRow?.(newKey);
+            setStoreVersion((v) => v + 1);
+          },
+          redo: () => {
+            store.restoreRow?.(duplicated, targetIdx + 1);
+            setStoreVersion((v) => v + 1);
+          },
+        });
+        onRowInserted?.({ data: duplicated, key: newKey });
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? `📑 Satır çoğaltıldı (#${sourceKey} → #${newKey})`
+            : `📑 Row duplicated (#${sourceKey} → #${newKey})`,
+          'success'
+        );
+        setStoreVersion((v) => v + 1);
+        requestRender();
+      }
+    },
+    [store, permissions, onRowInserted, currentLocale, showToast, requestRender]
+  );
+
+  const handleDeleteRow = useCallback(
+    async (rowIndex?: number) => {
+      const targetIdx = rowIndex ?? selectionRef.current.activeCell.row;
+      const vRow = store.getViewRow(targetIdx);
+      if (!vRow || vRow.type !== 'data') return;
+
+      if (
+        permissions.mode === 'read' ||
+        permissions.mode === 'readonly' ||
+        permissions.allowDeleting === false
+      ) {
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? '🔒 Satır silme yetkisi kapalı.'
+            : '🔒 Row deletion is disabled by permissions.',
+          'warning'
+        );
+        return;
+      }
+
+      const rowKey = vRow.data.id ?? targetIdx;
+      const snapshot = { ...vRow.data };
+
+      if (onRowRemoving) {
+        const evt: RowRemovingEvent = { key: rowKey, data: snapshot, cancel: false };
+        await onRowRemoving(evt);
+        if (evt.cancel) return;
+      }
+
+      await store.deleteRow?.(rowKey);
+      historyRef.current.push({
+        description: 'Delete Row',
+        undo: () => {
+          store.restoreRow?.(snapshot, targetIdx);
+          setStoreVersion((v) => v + 1);
+        },
+        redo: () => {
+          store.deleteRow?.(rowKey);
+          setStoreVersion((v) => v + 1);
+        },
+      });
+      onRowRemoved?.({ key: rowKey, data: snapshot });
+      showToast(
+        currentLocale.code.startsWith('tr')
+          ? `🗑️ Satır silindi (#${rowKey})`
+          : `🗑️ Row deleted (#${rowKey})`,
+        'info'
+      );
+      setStoreVersion((v) => v + 1);
+      requestRender();
+    },
+    [store, permissions, onRowRemoving, onRowRemoved, currentLocale, showToast, requestRender]
+  );
+
+  const handleSaveBatch = useCallback(async () => {
+    const changes = store.getPendingChanges?.();
+    if (!changes) return;
+
+    if (onSaving) {
+      const evt: SavingEvent = { changes, cancel: false };
+      await onSaving(evt);
+      if (evt.cancel) return;
+    }
+
+    const committed = await store.saveBatchChanges?.();
+    if (committed) {
+      onSaved?.({ changes: committed });
+      const count =
+        (committed.inserted?.length || 0) +
+        (committed.updated?.length || 0) +
+        (committed.deleted?.length || 0);
+      showToast(
+        currentLocale.code.startsWith('tr')
+          ? `✅ Toplu kayıt başarılı (${count} işlem kaydedildi).`
+          : `✅ Batch save completed (${count} changes committed).`,
+        'success'
+      );
+      setStoreVersion((v) => v + 1);
+      requestRender();
+    }
+  }, [store, onSaving, onSaved, currentLocale, showToast, requestRender]);
+
+  const handleDiscardBatch = useCallback(() => {
+    store.discardBatchChanges?.();
+    historyRef.current.clear();
+    showToast(
+      currentLocale.code.startsWith('tr')
+        ? '↩️ Kaydedilmemiş tüm değişiklikler geri alındı.'
+        : '↩️ All unsaved batch changes discarded.',
+      'info'
+    );
+    setStoreVersion((v) => v + 1);
+    requestRender();
+  }, [store, currentLocale, showToast, requestRender]);
+
+  // ============================================================================
+  // CELL DUPLICATION HELPERS (FILL DOWN, FILL RIGHT & DRAG AUTOFILL)
+  // ============================================================================
+  const handleDuplicateCellDown = useCallback(() => {
+    const norm = selectionRef.current.getNormalizedRange();
+    const geom = geometryRef.current;
+    const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
+
+    if (norm.maxRow > norm.minRow) {
+      // Excel Ctrl+D when multiple rows selected: copy top row of selection down into all selected rows
+      const topRow = store.getViewRow(norm.minRow);
+      if (!topRow || topRow.type !== 'data') return;
+      for (let r = norm.minRow + 1; r <= norm.maxRow; r++) {
+        const targetRow = store.getViewRow(r);
+        if (!targetRow || targetRow.type !== 'data') continue;
+        for (let c = norm.minCol; c <= norm.maxCol; c++) {
+          const colDef = geom.columns[c];
+          if (!colDef) continue;
+          updates.push({
+            rowIndex: r,
+            rowKey: targetRow.data.id ?? r,
+            colDef,
+            newValue: topRow.data[colDef.id],
+          });
+        }
+      }
+    } else {
+      // Single row selected: duplicate active cell(s) into the row directly below (and move selection down)
+      const nextR = norm.minRow + 1;
+      if (nextR >= store.getRowCount()) return;
+      const srcRow = store.getViewRow(norm.minRow);
+      const dstRow = store.getViewRow(nextR);
+      if (!srcRow || srcRow.type !== 'data' || !dstRow || dstRow.type !== 'data') return;
+
+      for (let c = norm.minCol; c <= norm.maxCol; c++) {
+        const colDef = geom.columns[c];
+        if (!colDef) continue;
+        updates.push({
+          rowIndex: nextR,
+          rowKey: dstRow.data.id ?? nextR,
+          colDef,
+          newValue: srcRow.data[colDef.id],
+        });
+      }
+      selectionRef.current.setActiveCell(nextR, selectionRef.current.activeCell.col);
+      setSelectedCellUI({ row: nextR, col: selectionRef.current.activeCell.col });
+      setSelectionVersion((v) => v + 1);
+    }
+
+    applyBatchCellUpdates(updates, 'Duplicate Cell Down');
+  }, [store, applyBatchCellUpdates]);
+
+  const handleDuplicateCellRight = useCallback(() => {
+    const norm = selectionRef.current.getNormalizedRange();
+    const geom = geometryRef.current;
+    const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
+
+    if (norm.maxCol > norm.minCol) {
+      // Excel Ctrl+R when multiple columns selected: copy leftmost column into selected columns on right
+      for (let r = norm.minRow; r <= norm.maxRow; r++) {
+        const vRow = store.getViewRow(r);
+        if (!vRow || vRow.type !== 'data') continue;
+        const srcColDef = geom.columns[norm.minCol];
+        if (!srcColDef) continue;
+        const srcVal = vRow.data[srcColDef.id];
+
+        for (let c = norm.minCol + 1; c <= norm.maxCol; c++) {
+          const dstColDef = geom.columns[c];
+          if (!dstColDef) continue;
+          const plugin = ColumnTypeRegistry.get(dstColDef.type);
+          const coercedVal = plugin.parseClipboard
+            ? plugin.parseClipboard(String(srcVal ?? ''), dstColDef)
+            : srcVal;
+          updates.push({
+            rowIndex: r,
+            rowKey: vRow.data.id ?? r,
+            colDef: dstColDef,
+            newValue: coercedVal,
+          });
+        }
+      }
+    } else {
+      // Single column selected: duplicate into next editable column on the right (or below if same type)
+      const nextC = norm.minCol + 1;
+      if (nextC < geom.columns.length) {
+        const srcColDef = geom.columns[norm.minCol];
+        const dstColDef = geom.columns[nextC];
+        if (srcColDef && dstColDef) {
+          for (let r = norm.minRow; r <= norm.maxRow; r++) {
+            const vRow = store.getViewRow(r);
+            if (!vRow || vRow.type !== 'data') continue;
+            const srcVal = vRow.data[srcColDef.id];
+            const plugin = ColumnTypeRegistry.get(dstColDef.type);
+            const coercedVal = plugin.parseClipboard
+              ? plugin.parseClipboard(String(srcVal ?? ''), dstColDef)
+              : srcVal;
+            updates.push({
+              rowIndex: r,
+              rowKey: vRow.data.id ?? r,
+              colDef: dstColDef,
+              newValue: coercedVal,
+            });
+          }
+          selectionRef.current.setActiveCell(selectionRef.current.activeCell.row, nextC);
+          setSelectedCellUI({ row: selectionRef.current.activeCell.row, col: nextC });
+          setSelectionVersion((v) => v + 1);
+        }
+      }
+    }
+
+    applyBatchCellUpdates(updates, 'Duplicate Cell Right');
+  }, [store, applyBatchCellUpdates]);
+
+  // ============================================================================
+  // COLUMN SORTING, GROUPING, FILTERING & COLUMN UPDATES
+  // ============================================================================
+  const handleHeaderSort = (colIndex: number, isShift: boolean, explicitDesc?: boolean | null) => {
+    if (permissions.allowSorting === false) return;
     const col = geometryRef.current.columns[colIndex];
     if (!col || col.sortable === false) return;
 
     let nextRules: SortDescriptor[] = [];
     const existingIndex = sortRules.findIndex((s) => s.selector === col.id);
 
-    if (isShift) {
+    if (explicitDesc !== undefined) {
+      if (explicitDesc === null) {
+        nextRules = sortRules.filter((s) => s.selector !== col.id);
+      } else {
+        nextRules = [{ selector: col.id, desc: explicitDesc }];
+      }
+    } else if (isShift) {
       nextRules = [...sortRules];
       if (existingIndex !== -1) {
         if (!nextRules[existingIndex].desc) {
-          nextRules[existingIndex].desc = true;
+          nextRules[existingIndex] = { ...nextRules[existingIndex], desc: true };
         } else {
           nextRules.splice(existingIndex, 1);
         }
@@ -225,18 +1119,58 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     store.setSorting(nextRules);
   };
 
-  // 8. Sütun Boyutlandırma (Resize Mouse Olayları)
+  const handleToggleGroupColumn = (colId: string) => {
+    if (permissions.allowGrouping === false) return;
+    const exists = groups.some((g) => g.selector === colId);
+    const nextGroups = exists
+      ? groups.filter((g) => g.selector !== colId)
+      : [...groups, { selector: colId }];
+    setGroups(nextGroups);
+    store.setGrouping(nextGroups);
+  };
+
+  const handleApplyColumnFilter = (colId: string, filterState: ColumnFilterState | null) => {
+    setColumnFilters((prev) => {
+      const next = { ...prev };
+      if (!filterState) {
+        delete next[colId];
+      } else {
+        next[colId] = filterState;
+      }
+      store.setFilter(compileColumnFilters(next));
+      return next;
+    });
+  };
+
+  const handleClearAllFilters = () => {
+    setColumnFilters({});
+    store.setFilter(null);
+  };
+
+  const handleUpdateColumnDef = (colId: string, patch: Partial<ColumnDef>) => {
+    setColumns((prev) =>
+      prev.map((c) => (c.id === colId ? { ...c, ...patch } : c))
+    );
+  };
+
+  const handleChangeSummaryType = (colId: string, summaryType: SummaryType) => {
+    store.setSummaryType?.(colId, summaryType);
+    setStoreVersion((v) => v + 1);
+    requestRender();
+  };
+
+  // ============================================================================
+  // COLUMN RESIZING EFFECT
+  // ============================================================================
   useEffect(() => {
     if (!resizingCol) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       const deltaX = e.clientX - resizingCol.startX;
-      const newWidth = Math.max(40, resizingCol.initialWidth + deltaX);
-      setColumns((prev) => {
-        const next = [...prev];
-        next[resizingCol.colIndex] = { ...next[resizingCol.colIndex], width: newWidth };
-        return next;
-      });
+      const newWidth = Math.max(48, resizingCol.initialWidth + deltaX);
+      setColumns((prev) =>
+        prev.map((c) => (c.id === resizingCol.colId ? { ...c, width: newWidth } : c))
+      );
     };
 
     const handleMouseUp = () => {
@@ -251,25 +1185,191 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     };
   }, [resizingCol]);
 
-  // 9. Hücre Seçimini Taşıma
-  const moveSelection = (dRow: number, dCol: number, isRangeSelect: boolean = false) => {
-    const geom = geometryRef.current;
-    const cur = selectionRef.current.activeCell;
-    const nextRow = Math.max(0, Math.min(store.getRowCount() - 1, cur.row + dRow));
-    const nextCol = Math.max(0, Math.min(geom.columns.length - 1, cur.col + dCol));
+  // ============================================================================
+  // DRAG SELECTION & FILL HANDLE DRAG EFFECT (WITH AUTO-SCROLL AT EDGES)
+  // ============================================================================
+  useEffect(() => {
+    if (!isDraggingSelection && !isDraggingRowNumbers && !fillDragState) return;
 
-    if (isRangeSelect) {
-      selectionRef.current.setRangeEnd(nextRow, nextCol);
-    } else {
-      selectionRef.current.setActiveCell(nextRow, nextCol);
-    }
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      const surface = gridSurfaceRef.current;
+      const sc = scrollContainerRef.current;
+      if (!surface || !sc) return;
 
-    setSelectedCellUI({ row: nextRow, col: nextCol });
-    ensureCellVisible(nextRow, nextCol);
-    requestRender();
-  };
+      const rect = surface.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
 
-  // Görünür alana kaydırma (Auto-scroll into view)
+      // Auto-scroll when dragging near viewport edges
+      const edgeThreshold = 36;
+      if (y > rect.height - edgeThreshold) {
+        sc.scrollTop += 18;
+      } else if (y < geometryRef.current.headerHeight + edgeThreshold && y > geometryRef.current.headerHeight) {
+        sc.scrollTop = Math.max(0, sc.scrollTop - 18);
+      }
+      if (x > rect.width - edgeThreshold) {
+        sc.scrollLeft += 24;
+      } else if (x < geometryRef.current.totalFrozenWidth + edgeThreshold && x > geometryRef.current.totalFrozenWidth) {
+        sc.scrollLeft = Math.max(0, sc.scrollLeft - 24);
+      }
+
+      const rowCount = store.getRowCount();
+      if (rowCount === 0) return;
+
+      const clampedY = Math.max(geometryRef.current.headerHeight + 2, Math.min(y, rect.height - 2));
+      const virtualY = clampedY - geometryRef.current.headerHeight + scrollPosRef.current.top;
+      const targetRow = Math.max(0, Math.min(rowCount - 1, Math.floor(virtualY / geometryRef.current.rowHeight)));
+
+      if (isDraggingRowNumbers) {
+        selectionRef.current.setRangeEnd(targetRow, geometryRef.current.columns.length - 1);
+        setSelectionVersion((v) => v + 1);
+        requestRender();
+        return;
+      }
+
+      const hit = geometryRef.current.hitTest(
+        Math.max(geometryRef.current.rowNumberWidth + 2, Math.min(x, rect.width - 2)),
+        clampedY,
+        scrollPosRef.current.left,
+        scrollPosRef.current.top,
+        rowCount
+      );
+      if (!hit) return;
+
+      if (isDraggingSelection) {
+        selectionRef.current.setRangeEnd(hit.row, hit.col);
+        setSelectionVersion((v) => v + 1);
+        requestRender();
+      } else if (fillDragState) {
+        const src = fillDragState.sourceRange;
+        const minRow = Math.min(src.minRow, hit.row);
+        const maxRow = Math.max(src.maxRow, hit.row);
+        const minCol = Math.min(src.minCol, hit.col);
+        const maxCol = Math.max(src.maxCol, hit.col);
+
+        setFillDragState((prev) =>
+          prev
+            ? {
+                ...prev,
+                targetRange: { minRow, maxRow, minCol, maxCol },
+              }
+            : null
+        );
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      if (isDraggingSelection) {
+        setIsDraggingSelection(false);
+      }
+      if (isDraggingRowNumbers) {
+        setIsDraggingRowNumbers(false);
+      }
+      if (fillDragState) {
+        const { mode, sourceRange, targetRange } = fillDragState;
+        setFillDragState(null);
+
+        const isSameRange =
+          sourceRange.minRow === targetRange.minRow &&
+          sourceRange.maxRow === targetRange.maxRow &&
+          sourceRange.minCol === targetRange.minCol &&
+          sourceRange.maxCol === targetRange.maxCol;
+
+        if (isSameRange && mode === 'right-duplicate') {
+          // Single click on right-side duplicate button -> duplicate cell down or right!
+          handleDuplicateCellDown();
+          return;
+        }
+
+        if (!isSameRange) {
+          const geom = geometryRef.current;
+          const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
+          const srcHeight = sourceRange.maxRow - sourceRange.minRow + 1;
+          const srcWidth = sourceRange.maxCol - sourceRange.minCol + 1;
+
+          for (let r = targetRange.minRow; r <= targetRange.maxRow; r++) {
+            const dstRow = store.getViewRow(r);
+            if (!dstRow || dstRow.type !== 'data') continue;
+
+            for (let c = targetRange.minCol; c <= targetRange.maxCol; c++) {
+              // Skip cells that were already inside sourceRange
+              if (
+                r >= sourceRange.minRow &&
+                r <= sourceRange.maxRow &&
+                c >= sourceRange.minCol &&
+                c <= sourceRange.maxCol
+              ) {
+                continue;
+              }
+
+              const srcR =
+                sourceRange.minRow +
+                ((((r - sourceRange.minRow) % srcHeight) + srcHeight) % srcHeight);
+              const srcC =
+                sourceRange.minCol +
+                ((((c - sourceRange.minCol) % srcWidth) + srcWidth) % srcWidth);
+
+              const srcViewRow = store.getViewRow(srcR);
+              const srcColDef = geom.columns[srcC];
+              const dstColDef = geom.columns[c];
+              if (!srcViewRow || srcViewRow.type !== 'data' || !srcColDef || !dstColDef) continue;
+
+              let val = srcViewRow.data[srcColDef.id];
+
+              // Smart Series increment for Account Code patterns (e.g. ACC-100001)
+              if (typeof val === 'string' && /^([A-Za-z-]+)(\d+)$/.test(val) && srcC === c) {
+                const m = val.match(/^([A-Za-z-]+)(\d+)$/);
+                if (m) {
+                  const offset = r - srcR;
+                  val = `${m[1]}${Number(m[2]) + offset}`;
+                }
+              } else if (srcC !== c) {
+                const plugin = ColumnTypeRegistry.get(dstColDef.type);
+                if (plugin.parseClipboard) {
+                  val = plugin.parseClipboard(String(val ?? ''), dstColDef);
+                }
+              }
+
+              updates.push({
+                rowIndex: r,
+                rowKey: dstRow.data.id ?? r,
+                colDef: dstColDef,
+                newValue: val,
+              });
+            }
+          }
+
+          selectionRef.current.selectionRange = {
+            startRow: targetRange.minRow,
+            startCol: targetRange.minCol,
+            endRow: targetRange.maxRow,
+            endCol: targetRange.maxCol,
+          };
+          setSelectionVersion((v) => v + 1);
+          applyBatchCellUpdates(updates, 'AutoFill Cells');
+        }
+      }
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [
+    isDraggingSelection,
+    isDraggingRowNumbers,
+    fillDragState,
+    store,
+    applyBatchCellUpdates,
+    handleDuplicateCellDown,
+    requestRender,
+  ]);
+
+  // ============================================================================
+  // NAVIGATION & AUTO-SCROLL INTO VIEW
+  // ============================================================================
   const ensureCellVisible = (row: number, col: number) => {
     const geom = geometryRef.current;
     const sc = scrollContainerRef.current;
@@ -294,20 +1394,49 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     }
   };
 
-  // 10. Editör Açma (Micro-DOM Overlay)
+  const moveSelection = (dRow: number, dCol: number, isRangeSelect: boolean = false) => {
+    const geom = geometryRef.current;
+    const rowCount = store.getRowCount();
+    if (rowCount === 0 || geom.columns.length === 0) return;
+
+    const cur = isRangeSelect && selectionRef.current.selectionRange
+      ? {
+          row: selectionRef.current.selectionRange.endRow,
+          col: selectionRef.current.selectionRange.endCol,
+        }
+      : selectionRef.current.activeCell;
+
+    const nextRow = Math.max(0, Math.min(rowCount - 1, cur.row + dRow));
+    const nextCol = Math.max(0, Math.min(geom.columns.length - 1, cur.col + dCol));
+
+    if (isRangeSelect) {
+      selectionRef.current.setRangeEnd(nextRow, nextCol);
+    } else {
+      selectionRef.current.setActiveCell(nextRow, nextCol);
+      setSelectedCellUI({ row: nextRow, col: nextCol });
+    }
+
+    setSelectionVersion((v) => v + 1);
+    ensureCellVisible(nextRow, nextCol);
+    requestRender();
+  };
+
+  // ============================================================================
+  // OPEN INLINE MICRO-DOM EDITOR
+  // ============================================================================
   const openEditorForCell = (row: number, col: number, initialChar?: string) => {
     const geom = geometryRef.current;
     const colDef = geom.columns[col];
-    if (colDef.readonly) return;
+    const vRow = store.getViewRow(row);
+    if (!vRow || vRow.type === 'group') return;
+
+    if (!canEditCell(vRow.data, colDef, row, false)) return;
 
     const plugin = ColumnTypeRegistry.get(colDef.type);
-    if (!plugin.editorComponent) return; // Zero-DOM eklentiler (Boolean, Rating vb.)
+    if (!plugin.editorComponent) return;
 
     const screenRect = geom.getColumnScreenRect(col, scrollPosRef.current.left);
     const y = geom.headerHeight + row * geom.rowHeight - scrollPosRef.current.top;
-
-    const vRow = store.getViewRow(row);
-    if (!vRow || vRow.type === 'group') return;
 
     setActiveOverlay({
       row,
@@ -322,108 +1451,238 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     });
   };
 
-  // 11. Fare Etkileşimleri
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (activeOverlay) setActiveOverlay(null);
-    if (headerFilterState) setHeaderFilterState(null);
+  // ============================================================================
+  // VIEWPORT MOUSE EVENTS (FIXED COORDINATE SYSTEM)
+  // ============================================================================
+  const getViewportCoords = (e: React.MouseEvent): { x: number; y: number; onScrollbar: boolean } => {
+    const surface = gridSurfaceRef.current;
+    const sc = scrollContainerRef.current;
+    if (!surface) return { x: 0, y: 0, onScrollbar: false };
 
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = surface.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // A. Sütun Boyutlandırma Sınır Kontrolü
-    const resizeHit = geometryRef.current.hitTestColumnResize(x, y, scrollPosRef.current.left);
+    const onScrollbar = Boolean(
+      sc && (x >= sc.clientWidth || y >= sc.clientHeight)
+    );
+    return { x, y, onScrollbar };
+  };
+
+  const handleSurfaceMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (resizingCol || isDraggingSelection || isDraggingRowNumbers || fillDragState) return;
+    const { x, y, onScrollbar } = getViewportCoords(e);
+    if (onScrollbar) {
+      setCursorStyle('default');
+      return;
+    }
+
+    const geom = geometryRef.current;
+    const sl = scrollPosRef.current.left;
+    const st = scrollPosRef.current.top;
+
+    // 1. Check Resize Handle
+    const resizeHit = geom.hitTestColumnResize(x, y, sl);
     if (resizeHit) {
-      const col = geometryRef.current.columns[resizeHit.colIndex];
+      setCursorStyle('col-resize');
+      if (hoveredFilterColRef.current !== null) {
+        hoveredFilterColRef.current = null;
+        requestRender();
+      }
+      return;
+    }
+
+    // 2. Check Header & Filter Button Hover
+    if (y <= geom.headerHeight) {
+      const headerHit = geom.hitTestHeader(x, y, sl);
+      const nextFilterCol = headerHit?.isFilterIconHit ? headerHit.colIndex : null;
+      if (hoveredFilterColRef.current !== nextFilterCol) {
+        hoveredFilterColRef.current = nextFilterCol;
+        requestRender();
+      }
+      setCursorStyle(headerHit ? 'pointer' : 'default');
+      return;
+    }
+
+    if (hoveredFilterColRef.current !== null) {
+      hoveredFilterColRef.current = null;
+      requestRender();
+    }
+
+    // 3. Check Fill Handle / Right Duplicate Button Hover
+    const fhHit = geom.hitTestFillHandle(x, y, sl, st, selectionRef.current);
+    if (fhHit) {
+      setCursorStyle(fhHit === 'corner' ? 'crosshair' : 'copy');
+      return;
+    }
+
+    // 4. Check Row Number Gutter
+    if (x <= geom.rowNumberWidth) {
+      setCursorStyle('pointer');
+      return;
+    }
+
+    // 5. Cell Hover
+    const hit = geom.hitTest(x, y, sl, st, store.getRowCount());
+    if (
+      hit?.row !== hoveredCellRef.current?.row ||
+      hit?.col !== hoveredCellRef.current?.col
+    ) {
+      hoveredCellRef.current = hit ? { row: hit.row, col: hit.col } : null;
+      requestRender();
+    }
+    setCursorStyle('cell');
+  };
+
+  const handleSurfaceMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return; // Only left click here; right click handled in onContextMenu
+
+    const { x, y, onScrollbar } = getViewportCoords(e);
+    if (onScrollbar) return; // Let native scrollbar handle thumb dragging
+
+    if (activeOverlay) setActiveOverlay(null);
+    if (headerFilterState) setHeaderFilterState(null);
+    if (contextMenu) setContextMenu(null);
+
+    const geom = geometryRef.current;
+    const sl = scrollPosRef.current.left;
+    const st = scrollPosRef.current.top;
+    const rowCount = store.getRowCount();
+
+    // A. Column Resize Handle
+    const resizeHit = geom.hitTestColumnResize(x, y, sl);
+    if (resizeHit) {
+      const col = geom.columns[resizeHit.colIndex];
       setResizingCol({
         colIndex: resizeHit.colIndex,
+        colId: col.id,
         startX: e.clientX,
         initialWidth: col.width,
       });
       return;
     }
 
-    // B. Başlık Tıklaması (Sıralama veya Filtre Hunisi)
-    if (y <= geometryRef.current.headerHeight && x > geometryRef.current.rowNumberWidth) {
-      let clickedCol = -1;
-      let headerX = 0;
-      let headerW = 0;
-
-      // Frozen
-      let curX = geometryRef.current.rowNumberWidth;
-      for (let i = 0; i < geometryRef.current.frozenColumns.length; i++) {
-        const w = geometryRef.current.frozenColumns[i].width;
-        if (x >= curX && x < curX + w) {
-          clickedCol = i;
-          headerX = curX;
-          headerW = w;
-          break;
-        }
-        curX += w;
+    // B. Top-Left Select-All Box
+    if (x <= geom.rowNumberWidth && y <= geom.headerHeight) {
+      if (rowCount > 0 && geom.columns.length > 0) {
+        selectionRef.current.setActiveCell(0, 0);
+        selectionRef.current.setRangeEnd(rowCount - 1, geom.columns.length - 1);
+        setSelectedCellUI({ row: 0, col: 0 });
+        setSelectionVersion((v) => v + 1);
+        requestRender();
       }
+      return;
+    }
 
-      // Scrollable
-      if (clickedCol === -1 && x >= geometryRef.current.totalFrozenWidth) {
-        const sx = x - geometryRef.current.totalFrozenWidth + scrollPosRef.current.left;
-        const sIdx = geometryRef.current.findScrollableColIndexAtX(sx);
-        clickedCol = geometryRef.current.frozenColumns.length + sIdx;
-        headerX = geometryRef.current.totalFrozenWidth + geometryRef.current.scrollableColOffsets[sIdx] - scrollPosRef.current.left;
-        headerW = geometryRef.current.scrollableColumns[sIdx]?.width || 100;
-      }
-
-      if (clickedCol !== -1) {
-        const colDef = geometryRef.current.columns[clickedCol];
-        // Eğer sağdaki huni ikonuna tıklandıysa popover aç
-        if (x >= headerX + headerW - 24) {
+    // C. Header Click (Sort or Filter Funnel Button)
+    if (y <= geom.headerHeight && x > geom.rowNumberWidth) {
+      const headerHit = geom.hitTestHeader(x, y, sl);
+      if (headerHit) {
+        if (headerHit.isFilterIconHit && permissions.allowFiltering !== false) {
           setHeaderFilterState({
-            column: colDef,
-            rect: { x: headerX, y: 0, width: headerW, height: geometryRef.current.headerHeight },
+            column: headerHit.column,
+            rect: {
+              x: headerHit.headerX,
+              y: 0,
+              width: headerHit.headerWidth,
+              height: geom.headerHeight,
+            },
           });
         } else {
-          // Sıralama
-          handleHeaderClick(clickedCol, e.shiftKey);
+          handleHeaderSort(headerHit.colIndex, e.shiftKey);
         }
       }
       return;
     }
 
-    // C. Hücre Tıklaması (Hit-Test)
-    const hit = geometryRef.current.hitTest(
-      x,
-      y,
-      scrollPosRef.current.left,
-      scrollPosRef.current.top,
-      store.getRowCount()
-    );
+    // D. Fill Handle or Right-Side Cell Duplicate Handle
+    const canDup =
+      permissions.mode !== 'read' &&
+      permissions.mode !== 'readonly' &&
+      permissions.allowUpdating !== false &&
+      permissions.allowDuplicating !== false;
+
+    if (canDup) {
+      const fhHit = geom.hitTestFillHandle(x, y, sl, st, selectionRef.current);
+      if (fhHit) {
+        const norm = selectionRef.current.getNormalizedRange();
+        setFillDragState({
+          mode: fhHit,
+          sourceRange: norm,
+          targetRange: norm,
+        });
+        return;
+      }
+    }
+
+    // E. Row Number Gutter Click (Select Full Row)
+    const rowNumHit = geom.hitTestRowNumber(x, y, st, rowCount);
+    if (rowNumHit !== null && geom.columns.length > 0) {
+      if (e.shiftKey) {
+        selectionRef.current.setRangeEnd(rowNumHit, geom.columns.length - 1);
+      } else {
+        selectionRef.current.setActiveCell(rowNumHit, 0);
+        selectionRef.current.setRangeEnd(rowNumHit, geom.columns.length - 1);
+        setSelectedCellUI({ row: rowNumHit, col: 0 });
+      }
+      setIsDraggingRowNumbers(true);
+      setSelectionVersion((v) => v + 1);
+      requestRender();
+      containerRef.current?.focus();
+      return;
+    }
+
+    // F. Data Cell Click
+    const hit = geom.hitTest(x, y, sl, st, rowCount);
     if (!hit) return;
 
     const vRow = store.getViewRow(hit.row);
-    // Grup Satırı Tıklaması (Aç / Kapat)
+    // Group Header Expand/Collapse
     if (vRow && vRow.type === 'group') {
       store.toggleGroup(vRow.groupKey);
       return;
     }
 
-    selectionRef.current.setActiveCell(hit.row, hit.col);
-    setSelectedCellUI({ row: hit.row, col: hit.col });
+    if (e.shiftKey) {
+      selectionRef.current.setRangeEnd(hit.row, hit.col);
+    } else {
+      selectionRef.current.setActiveCell(hit.row, hit.col);
+      setSelectedCellUI({ row: hit.row, col: hit.col });
+      setIsDraggingSelection(true);
+    }
+    setSelectionVersion((v) => v + 1);
 
-    const colDef = geometryRef.current.columns[hit.col];
+    const colDef = geom.columns[hit.col];
     const plugin = ColumnTypeRegistry.get(colDef.type);
 
     if (plugin.onPointerDown && vRow && vRow.type === 'data') {
-      const res = plugin.onPointerDown({
-        localX: hit.localX,
-        localY: hit.localY,
-        value: vRow.data[colDef.id],
-        column: colDef,
-        setValue: (newVal) => {
-          store.setCell(vRow.data.id ?? hit.row, colDef.id, newVal);
-          onCellChange?.(vRow.data, colDef.id, newVal);
-        },
-      });
+      // Action column works even in read mode; mutable plugins check canEditCell
+      const isAction = colDef.type === 'action';
+      if (isAction || canEditCell(vRow.data, colDef, hit.row, false)) {
+        let shouldFocusContainer = true;
+        const res = plugin.onPointerDown({
+          localX: hit.localX,
+          localY: hit.localY,
+          value: vRow.data[colDef.id],
+          row: vRow.data,
+          rowIndex: hit.row,
+          column: colDef,
+          setValue: (newVal) => {
+            commitSingleCellEdit(hit.row, colDef, newVal, true);
+          },
+        });
 
-      if (res.shouldOpenEditor) {
-        setTimeout(() => openEditorForCell(hit.row, hit.col), 0);
+        if (res.shouldOpenEditor) {
+          shouldFocusContainer = false;
+          setIsDraggingSelection(false);
+          openEditorForCell(hit.row, hit.col);
+        }
+
+        requestRender();
+        if (shouldFocusContainer) {
+          containerRef.current?.focus();
+        }
+        return;
       }
     }
 
@@ -431,24 +1690,280 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     containerRef.current?.focus();
   };
 
-  const handleCanvasDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  const handleSurfaceDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { x, y, onScrollbar } = getViewportCoords(e);
+    if (onScrollbar) return;
 
-    const hit = geometryRef.current.hitTest(
-      x,
-      y,
-      scrollPosRef.current.left,
-      scrollPosRef.current.top,
-      store.getRowCount()
-    );
+    const geom = geometryRef.current;
+    const sl = scrollPosRef.current.left;
+    const st = scrollPosRef.current.top;
+
+    // Double-clicking Fill Handle -> duplicate down!
+    const fhHit = geom.hitTestFillHandle(x, y, sl, st, selectionRef.current);
+    if (fhHit) {
+      handleDuplicateCellDown();
+      return;
+    }
+
+    const hit = geom.hitTest(x, y, sl, st, store.getRowCount());
     if (!hit) return;
 
+    setIsDraggingSelection(false);
     openEditorForCell(hit.row, hit.col);
   };
 
-  // 12. Klavye Navigasyonu
+  const handleSurfaceContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const { x, y, onScrollbar } = getViewportCoords(e);
+    if (onScrollbar) return;
+
+    if (activeOverlay) setActiveOverlay(null);
+    if (headerFilterState) setHeaderFilterState(null);
+
+    const geom = geometryRef.current;
+    const sl = scrollPosRef.current.left;
+    const st = scrollPosRef.current.top;
+    const rowCount = store.getRowCount();
+
+    // 1. Header Right-Click
+    if (y <= geom.headerHeight && x > geom.rowNumberWidth) {
+      const headerHit = geom.hitTestHeader(x, y, sl);
+      if (headerHit) {
+        setContextMenu({
+          targetType: 'header',
+          x,
+          y,
+          row: 0,
+          col: headerHit.colIndex,
+          column: headerHit.column,
+        });
+      }
+      return;
+    }
+
+    // 2. Row Number Right-Click
+    const rowNumHit = geom.hitTestRowNumber(x, y, st, rowCount);
+    if (rowNumHit !== null) {
+      const vRow = store.getViewRow(rowNumHit);
+      if (vRow && vRow.type === 'data') {
+        selectionRef.current.setActiveCell(rowNumHit, 0);
+        selectionRef.current.setRangeEnd(rowNumHit, geom.columns.length - 1);
+        setSelectedCellUI({ row: rowNumHit, col: 0 });
+        setSelectionVersion((v) => v + 1);
+        requestRender();
+
+        setContextMenu({
+          targetType: 'rownumber',
+          x,
+          y,
+          row: rowNumHit,
+          col: 0,
+          column: geom.columns[0],
+          rowData: vRow.data,
+        });
+      }
+      return;
+    }
+
+    // 3. Cell Right-Click
+    const hit = geom.hitTest(x, y, sl, st, rowCount);
+    if (!hit) return;
+
+    const vRow = store.getViewRow(hit.row);
+    if (!vRow || vRow.type !== 'data') return;
+
+    if (!selectionRef.current.isCellSelected(hit.row, hit.col)) {
+      selectionRef.current.setActiveCell(hit.row, hit.col);
+      setSelectedCellUI({ row: hit.row, col: hit.col });
+      setSelectionVersion((v) => v + 1);
+      requestRender();
+    }
+
+    setContextMenu({
+      targetType: 'cell',
+      x,
+      y,
+      row: hit.row,
+      col: hit.col,
+      column: geom.columns[hit.col],
+      rowData: vRow.data,
+    });
+  };
+
+  // ============================================================================
+  // CLEAR SELECTED CELLS
+  // ============================================================================
+  const handleClearSelectedCells = useCallback(() => {
+    const norm = selectionRef.current.getNormalizedRange();
+    const geom = geometryRef.current;
+    const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
+
+    for (let r = norm.minRow; r <= norm.maxRow; r++) {
+      const vRow = store.getViewRow(r);
+      if (!vRow || vRow.type !== 'data') continue;
+      for (let c = norm.minCol; c <= norm.maxCol; c++) {
+        const colDef = geom.columns[c];
+        if (!colDef) continue;
+        const emptyVal =
+          colDef.type === 'number' || colDef.type === 'currency' || colDef.type === 'progress' || colDef.type === 'rating'
+            ? 0
+            : colDef.type === 'boolean'
+            ? false
+            : '';
+        updates.push({
+          rowIndex: r,
+          rowKey: vRow.data.id ?? r,
+          colDef,
+          newValue: emptyVal,
+        });
+      }
+    }
+
+    applyBatchCellUpdates(updates, 'Clear Cells');
+  }, [store, applyBatchCellUpdates]);
+
+  // ============================================================================
+  // EXCEL TSV CLIPBOARD COPY & PASTE
+  // ============================================================================
+  const buildSelectedTsv = useCallback((): string => {
+    const norm = selectionRef.current.getNormalizedRange();
+    const rowsText: string[] = [];
+
+    for (let r = norm.minRow; r <= norm.maxRow; r++) {
+      const vRow = store.getViewRow(r);
+      if (!vRow || vRow.type === 'group') continue;
+
+      const cellsText: string[] = [];
+      for (let c = norm.minCol; c <= norm.maxCol; c++) {
+        const colDef = geometryRef.current.columns[c];
+        if (!colDef) continue;
+        const val = vRow.data[colDef.id];
+        const plugin = ColumnTypeRegistry.get(colDef.type);
+        const formatted = plugin.formatClipboard
+          ? plugin.formatClipboard(val, colDef)
+          : String(val ?? '');
+        cellsText.push(formatted);
+      }
+      rowsText.push(cellsText.join('\t'));
+    }
+
+    return rowsText.join('\n');
+  }, [store]);
+
+  const applyPastedTsv = useCallback(
+    (text: string) => {
+      if (!text) return;
+      if (
+        permissions.mode === 'read' ||
+        permissions.mode === 'readonly' ||
+        permissions.allowUpdating === false ||
+        permissions.allowClipboardPaste === false
+      ) {
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? '🔒 Panodan yapıştırma yetkisi kapalı.'
+            : '🔒 Clipboard paste is disabled by permissions.',
+          'warning'
+        );
+        return;
+      }
+
+      const lines = text.replace(/\r/g, '').split('\n');
+      if (lines.length > 1 && lines[lines.length - 1] === '') {
+        lines.pop();
+      }
+
+      const norm = selectionRef.current.getNormalizedRange();
+      const geom = geometryRef.current;
+      const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
+
+      // Excel Behavior: If a single cell is in clipboard and multiple cells are selected, fill entire selection!
+      const isSingleClipboardValue = lines.length === 1 && !lines[0].includes('\t');
+      const hasMultiSelection = norm.maxRow > norm.minRow || norm.maxCol > norm.minCol;
+
+      if (isSingleClipboardValue && hasMultiSelection) {
+        const rawCellText = lines[0];
+        for (let r = norm.minRow; r <= norm.maxRow; r++) {
+          const vRow = store.getViewRow(r);
+          if (!vRow || vRow.type !== 'data') continue;
+          for (let c = norm.minCol; c <= norm.maxCol; c++) {
+            const colDef = geom.columns[c];
+            if (!colDef) continue;
+            const plugin = ColumnTypeRegistry.get(colDef.type);
+            const parsedVal = plugin.parseClipboard
+              ? plugin.parseClipboard(rawCellText, colDef)
+              : rawCellText.trim();
+            updates.push({
+              rowIndex: r,
+              rowKey: vRow.data.id ?? r,
+              colDef,
+              newValue: parsedVal,
+            });
+          }
+        }
+      } else {
+        const startRow = norm.minRow;
+        const startCol = norm.minCol;
+
+        lines.forEach((line, rOffset) => {
+          const targetRow = startRow + rOffset;
+          if (targetRow >= store.getRowCount()) return;
+
+          const vRow = store.getViewRow(targetRow);
+          if (!vRow || vRow.type !== 'data') return;
+
+          const cells = line.split('\t');
+          cells.forEach((cellText, cOffset) => {
+            const targetCol = startCol + cOffset;
+            if (targetCol >= geom.columns.length) return;
+
+            const colDef = geom.columns[targetCol];
+            if (!colDef) return;
+            const plugin = ColumnTypeRegistry.get(colDef.type);
+            const parsedVal = plugin.parseClipboard
+              ? plugin.parseClipboard(cellText, colDef)
+              : cellText.trim();
+
+            updates.push({
+              rowIndex: targetRow,
+              rowKey: vRow.data.id ?? targetRow,
+              colDef,
+              newValue: parsedVal,
+            });
+          });
+        });
+      }
+
+      applyBatchCellUpdates(updates, 'Paste from Clipboard');
+    },
+    [permissions, store, applyBatchCellUpdates, currentLocale, showToast]
+  );
+
+  const handleCopy = (e: React.ClipboardEvent) => {
+    if (activeOverlay) return;
+    e.preventDefault();
+    const tsv = buildSelectedTsv();
+    internalClipboardRef.current = tsv;
+    e.clipboardData.setData('text/plain', tsv);
+    showToast(
+      currentLocale.code.startsWith('tr')
+        ? '📋 Seçili hücreler panoya kopyalandı (TSV).'
+        : '📋 Selected range copied to clipboard (TSV).',
+      'info'
+    );
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (activeOverlay) return;
+    const text = e.clipboardData.getData('text/plain') || internalClipboardRef.current;
+    if (!text) return;
+    e.preventDefault();
+    applyPastedTsv(text);
+  };
+
+  // ============================================================================
+  // KEYBOARD NAVIGATION & EXCEL SHORTCUTS
+  // ============================================================================
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (activeOverlay) return;
 
@@ -456,22 +1971,75 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     const colDef = geometryRef.current.columns[col];
     const vRow = store.getViewRow(row);
 
-    // Eklentiye özel tuş dinleyicisi (Space toggle, 1-5 rating vb.)
-    if (colDef && vRow && vRow.type === 'data') {
+    // Excel Shortcuts with Ctrl / Meta
+    if (e.ctrlKey || e.metaKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'd') {
+        e.preventDefault();
+        handleDuplicateCellDown();
+        return;
+      }
+      if (k === 'r') {
+        e.preventDefault();
+        handleDuplicateCellRight();
+        return;
+      }
+      if (k === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) historyRef.current.redo();
+        else historyRef.current.undo();
+        setStoreVersion((v) => v + 1);
+        requestRender();
+        return;
+      }
+      if (k === 'y') {
+        e.preventDefault();
+        historyRef.current.redo();
+        setStoreVersion((v) => v + 1);
+        requestRender();
+        return;
+      }
+      if (k === 'a') {
+        e.preventDefault();
+        if (store.getRowCount() > 0 && geometryRef.current.columns.length > 0) {
+          selectionRef.current.setActiveCell(0, 0);
+          selectionRef.current.setRangeEnd(
+            store.getRowCount() - 1,
+            geometryRef.current.columns.length - 1
+          );
+          setSelectionVersion((v) => v + 1);
+          requestRender();
+        }
+        return;
+      }
+    }
+
+    // Shift+D for Row Duplication
+    if (e.shiftKey && e.key === 'D' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      handleDuplicateRow(row);
+      return;
+    }
+
+    // Plugin-specific key handlers (Space toggle for Boolean, 1-5 for Rating, initial char for Text/Number)
+    if (colDef && vRow && vRow.type === 'data' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const plugin = ColumnTypeRegistry.get(colDef.type);
       if (plugin.onKeyDown) {
-        const handled = plugin.onKeyDown({
-          event: e,
-          value: vRow.data[colDef.id],
-          column: colDef,
-          setValue: (newVal) => {
-            store.setCell(vRow.data.id ?? row, colDef.id, newVal);
-            onCellChange?.(vRow.data, colDef.id, newVal);
-            requestRender();
-          },
-          openEditor: (char) => openEditorForCell(row, col, char),
-        });
-        if (handled) return;
+        const isAction = colDef.type === 'action';
+        if (isAction || canEditCell(vRow.data, colDef, row, true)) {
+          const handled = plugin.onKeyDown({
+            event: e,
+            value: vRow.data[colDef.id],
+            row: vRow.data,
+            rowIndex: row,
+            column: colDef,
+            setValue: (newVal) => {
+              commitSingleCellEdit(row, colDef, newVal, true);
+            },
+            openEditor: (char) => openEditorForCell(row, col, char),
+          });
+          if (handled) return;
+        }
       }
     }
 
@@ -497,103 +2065,23 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         moveSelection(0, e.shiftKey ? -1 : 1);
         break;
       case 'Enter':
+      case 'F2':
         e.preventDefault();
         openEditorForCell(row, col);
         break;
       case 'Delete':
       case 'Backspace':
         e.preventDefault();
-        if (colDef && !colDef.readonly && vRow && vRow.type === 'data') {
-          store.setCell(vRow.data.id ?? row, colDef.id, null);
-          onCellChange?.(vRow.data, colDef.id, null);
-          requestRender();
-        }
-        break;
-      case 'z':
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          if (e.shiftKey) historyRef.current.redo();
-          else historyRef.current.undo();
-          requestRender();
-        }
-        break;
-      case 'y':
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          historyRef.current.redo();
-          requestRender();
-        }
+        handleClearSelectedCells();
         break;
     }
   };
 
-  // 13. TSV Pano Kopyalama (Ctrl+C)
-  const handleCopy = (e: React.ClipboardEvent) => {
-    if (activeOverlay) return;
-    e.preventDefault();
-
-    const norm = selectionRef.current.getNormalizedRange();
-    const rowsText: string[] = [];
-
-    for (let r = norm.minRow; r <= norm.maxRow; r++) {
-      const vRow = store.getViewRow(r);
-      if (!vRow || vRow.type === 'group') continue;
-
-      const cellsText: string[] = [];
-      for (let c = norm.minCol; c <= norm.maxCol; c++) {
-        const colDef = geometryRef.current.columns[c];
-        const val = vRow.data[colDef.id];
-        const plugin = ColumnTypeRegistry.get(colDef.type);
-        const formatted = plugin.formatClipboard ? plugin.formatClipboard(val, colDef) : String(val ?? '');
-        cellsText.push(formatted);
-      }
-      rowsText.push(cellsText.join('\t'));
-    }
-
-    e.clipboardData.setData('text/plain', rowsText.join('\n'));
-  };
-
-  // 14. TSV Pano Yapıştırma (Ctrl+V)
-  const handlePaste = (e: React.ClipboardEvent) => {
-    if (activeOverlay) return;
-    const text = e.clipboardData.getData('text/plain');
-    if (!text) return;
-    e.preventDefault();
-
-    const lines = text.replace(/\r/g, '').split('\n');
-    if (lines[lines.length - 1] === '') lines.pop();
-
-    const startRow = selectionRef.current.activeCell.row;
-    const startCol = selectionRef.current.activeCell.col;
-
-    lines.forEach((line, rOffset) => {
-      const targetRow = startRow + rOffset;
-      if (targetRow >= store.getRowCount()) return;
-
-      const vRow = store.getViewRow(targetRow);
-      if (!vRow || vRow.type === 'group') return;
-
-      const cells = line.split('\t');
-      cells.forEach((cellText, cOffset) => {
-        const targetCol = startCol + cOffset;
-        if (targetCol >= geometryRef.current.columns.length) return;
-
-        const colDef = geometryRef.current.columns[targetCol];
-        if (colDef.readonly) return;
-
-        const plugin = ColumnTypeRegistry.get(colDef.type);
-        const parsedVal = plugin.parseClipboard ? plugin.parseClipboard(cellText, colDef) : cellText.trim();
-
-        store.setCell(vRow.data.id ?? targetRow, colDef.id, parsedVal);
-        onCellChange?.(vRow.data, colDef.id, parsedVal);
-      });
-    });
-
-    requestRender();
-  };
-
-  // 15. CSV İndirme
+  // ============================================================================
+  // CSV EXPORT
+  // ============================================================================
   const exportCsv = () => {
+    if (permissions.allowExport === false) return;
     const cols = geometryRef.current.columns;
     const headerRow = cols.map((c) => `"${c.title.replace(/"/g, '""')}"`).join(',');
     const rows: string[] = [headerRow];
@@ -613,19 +2101,93 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `sheetgl_export_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Aktif Hücre Değeri & Sütun
+  // ============================================================================
+  // LIVE SELECTION AGGREGATIONS (EXCEL STATUS BAR STATS)
+  // ============================================================================
+  const selectionStats = useMemo<SelectionSummaryStats | null>(() => {
+    const norm = selectionRef.current.getNormalizedRange();
+    const rowSpan = norm.maxRow - norm.minRow + 1;
+    const colSpan = norm.maxCol - norm.minCol + 1;
+    if (rowSpan * colSpan <= 1) return null;
+
+    // Cap calculation to 2,000 cells for instant 60 FPS responsiveness
+    if (rowSpan * colSpan > 2000) {
+      return {
+        count: rowSpan * colSpan,
+        numericCount: 0,
+        sum: 0,
+        avg: 0,
+        min: 0,
+        max: 0,
+      };
+    }
+
+    let count = 0;
+    let numericCount = 0;
+    let sum = 0;
+    let min = Infinity;
+    let max = -Infinity;
+
+    for (let r = norm.minRow; r <= norm.maxRow; r++) {
+      const vRow = store.getViewRow(r);
+      if (!vRow || vRow.type !== 'data') continue;
+      for (let c = norm.minCol; c <= norm.maxCol; c++) {
+        const colDef = geometryRef.current.columns[c];
+        if (!colDef) continue;
+        const val = vRow.data[colDef.id];
+        if (val !== null && val !== undefined && val !== '') {
+          count++;
+          if (typeof val === 'number' && !isNaN(val)) {
+            numericCount++;
+            sum += val;
+            if (val < min) min = val;
+            if (val > max) max = val;
+          }
+        }
+      }
+    }
+
+    return {
+      count,
+      numericCount,
+      sum,
+      avg: numericCount > 0 ? sum / numericCount : 0,
+      min: numericCount > 0 ? min : 0,
+      max: numericCount > 0 ? max : 0,
+    };
+  }, [store, selectionVersion, storeVersion]);
+
+  // Active Cell & Pending Batch Changes Info
   const currentColumn = geometryRef.current.columns[selectedCellUI.col];
   const activeViewRow = store.getViewRow(selectedCellUI.row);
   const currentCellValue =
     activeViewRow && activeViewRow.type === 'data' && currentColumn
       ? activeViewRow.data[currentColumn.id]
       : '';
+  const isActiveCellEditable = Boolean(
+    activeViewRow &&
+      activeViewRow.type === 'data' &&
+      currentColumn &&
+      canEditCell(activeViewRow.data, currentColumn, selectedCellUI.row, true)
+  );
+
+  const pendingChanges = store.getPendingChanges?.();
+  const pendingChangesCount =
+    (pendingChanges?.inserted?.length || 0) +
+    (pendingChanges?.updated?.length || 0) +
+    (pendingChanges?.deleted?.length || 0);
+
+  const normRange = selectionRef.current.getNormalizedRange();
+  const selectionSpan = {
+    rows: normRange.maxRow - normRange.minRow + 1,
+    cols: normRange.maxCol - normRange.minCol + 1,
+  };
 
   return (
     <div
@@ -650,10 +2212,10 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         ...style,
       }}
     >
-      {/* 1. ÜST ARAÇ ÇUBUĞU */}
+      {/* 1. TOP TOOLBAR */}
       <ToolBar
         rowCount={store.getRowCount()}
-        columnCount={columns.length}
+        columnCount={geometryRef.current.columns.length}
         theme={resolvedTheme}
         locale={currentLocale}
         currentThemeName={typeof currentThemeName === 'string' ? currentThemeName : 'custom'}
@@ -666,28 +2228,76 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         }}
         onExportCsv={exportCsv}
         groups={groups.map((g) => g.selector)}
-        onToggleGroupColumn={(colId) => {
-          const exists = groups.some((g) => g.selector === colId);
-          const nextGroups = exists
-            ? groups.filter((g) => g.selector !== colId)
-            : [...groups, { selector: colId }];
-          setGroups(nextGroups);
-          store.setGrouping(nextGroups);
+        onToggleGroupColumn={handleToggleGroupColumn}
+        onExpandAllGroups={() => store.expandAllGroups?.()}
+        onCollapseAllGroups={() => store.collapseAllGroups?.()}
+        availableColumns={columns}
+        onUpdateColumn={handleUpdateColumnDef}
+        summaryTypes={store.getSummaryTypes?.()}
+        onChangeSummaryType={handleChangeSummaryType}
+        permissions={permissions}
+        onPermissionsChange={handleUpdatePermissions}
+        onAddRow={() => handleInsertRow(0)}
+        onDuplicateRow={() => handleDuplicateRow(selectedCellUI.row)}
+        onDeleteRow={() => handleDeleteRow(selectedCellUI.row)}
+        canUndo={historyRef.current.canUndo()}
+        canRedo={historyRef.current.canRedo()}
+        onUndo={() => {
+          historyRef.current.undo();
+          setStoreVersion((v) => v + 1);
+          requestRender();
         }}
-        availableColumns={columns.map((c) => ({ id: c.id, title: c.title }))}
+        onRedo={() => {
+          historyRef.current.redo();
+          setStoreVersion((v) => v + 1);
+          requestRender();
+        }}
+        pendingChangesCount={pendingChangesCount}
+        onSaveBatch={handleSaveBatch}
+        onDiscardBatch={handleDiscardBatch}
+        activeFilterCount={Object.keys(columnFilters).length}
+        onClearAllFilters={handleClearAllFilters}
       />
 
-      {/* 2. FORMÜL & KOORDİNAT ÇUBUĞU */}
+      {/* 2. FORMULA & COORDINATE BAR */}
       <FormulaBar
         activeCoords={selectedCellUI}
+        selectionSpan={selectionSpan}
         column={currentColumn}
         currentValue={currentCellValue}
+        isEditable={isActiveCellEditable}
+        canDuplicate={
+          permissions.mode !== 'read' &&
+          permissions.mode !== 'readonly' &&
+          permissions.allowDuplicating !== false
+        }
+        onCommitValue={(newVal) => {
+          if (currentColumn) {
+            commitSingleCellEdit(selectedCellUI.row, currentColumn, newVal, true);
+          }
+        }}
+        onDuplicateDown={handleDuplicateCellDown}
+        onDuplicateRight={handleDuplicateCellRight}
+        onDuplicateRow={() => handleDuplicateRow(selectedCellUI.row)}
         theme={resolvedTheme}
+        locale={currentLocale}
       />
 
-      {/* 3. ANA GRID YÜZEYİ (CANVAS + SANAL SCROLLBAR + DOM OVERLAYS) */}
-      <div ref={gridSurfaceRef} style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-        {/* Fiziksel Canvas */}
+      {/* 3. MAIN GRID SURFACE (CANVAS + VIRTUAL SCROLLBAR + MICRO-DOM OVERLAYS) */}
+      <div
+        ref={gridSurfaceRef}
+        onMouseDown={handleSurfaceMouseDown}
+        onMouseMove={handleSurfaceMouseMove}
+        onDoubleClick={handleSurfaceDoubleClick}
+        onContextMenu={handleSurfaceContextMenu}
+        style={{
+          position: 'relative',
+          flex: 1,
+          overflow: 'hidden',
+          cursor: resizingCol ? 'col-resize' : cursorStyle,
+        }}
+      >
+        {/* Physical 2D Canvas */}
         <canvas
           ref={canvasRef}
           style={{
@@ -701,7 +2311,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
           }}
         />
 
-        {/* Sanal Kaydırma Çubuğu & Tıklama Katmanı */}
+        {/* Virtual Scroll Container */}
         <div
           ref={scrollContainerRef}
           onScroll={(e) => {
@@ -710,8 +2320,19 @@ export const SheetGL: React.FC<SheetGLProps> = ({
               left: target.scrollLeft,
               top: target.scrollTop,
             };
+            const topRow = Math.max(
+              1,
+              Math.floor(target.scrollTop / geometryRef.current.rowHeight) + 1
+            );
+            setScrollIndicator({ visible: true, row: topRow });
+            if (scrollHideTimerRef.current) {
+              window.clearTimeout(scrollHideTimerRef.current);
+            }
+            scrollHideTimerRef.current = window.setTimeout(() => {
+              setScrollIndicator((prev) => ({ ...prev, visible: false }));
+            }, 900);
+
             if (activeOverlay) setActiveOverlay(null);
-            if (headerFilterState) setHeaderFilterState(null);
             requestRender();
           }}
           style={{
@@ -721,37 +2342,170 @@ export const SheetGL: React.FC<SheetGLProps> = ({
             zIndex: 20,
           }}
         >
-          {/* Toplam Sanal Boyutu Oluşturan Boş Alan */}
+          {/* Virtual Sizing Spacer (Adds 18px right buffer so vertical scrollbar never covers rightmost header filter icon) */}
           <div
-            onMouseDown={handleCanvasMouseDown}
-            onDoubleClick={handleCanvasDoubleClick}
             style={{
-              width: geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth,
+              width:
+                geometryRef.current.totalFrozenWidth +
+                geometryRef.current.totalScrollableWidth +
+                18,
               height:
                 geometryRef.current.headerHeight +
                 store.getRowCount() * geometryRef.current.rowHeight,
-              cursor: resizingCol ? 'col-resize' : 'cell',
+              pointerEvents: 'none',
             }}
           />
         </div>
 
-        {/* 4. DİNAMİK MICRO-DOM HÜCRE EDİTÖRÜ */}
+        {/* Right-Side Scroll Indicator Pill & Quick Jump Buttons */}
+        {scrollIndicator.visible && store.getRowCount() > 30 && (
+          <div
+            style={{
+              position: 'absolute',
+              right: 24,
+              top: Math.max(
+                geometryRef.current.headerHeight + 8,
+                Math.min(
+                  (gridSurfaceRef.current?.clientHeight || 400) - 44,
+                  geometryRef.current.headerHeight +
+                    ((scrollIndicator.row / Math.max(1, store.getRowCount())) *
+                      ((gridSurfaceRef.current?.clientHeight || 400) -
+                        geometryRef.current.headerHeight -
+                        44))
+                )
+              ),
+              zIndex: 90,
+              padding: '4px 10px',
+              borderRadius: 6,
+              backgroundColor: resolvedTheme.dom.popoverBg,
+              color: resolvedTheme.dom.popoverText,
+              border: `1px solid ${resolvedTheme.dom.popoverBorder}`,
+              boxShadow: resolvedTheme.dom.popoverShadow,
+              fontSize: 11,
+              fontWeight: 700,
+              pointerEvents: 'none',
+              fontFamily: 'monospace',
+            }}
+          >
+            {currentLocale.rows}: {scrollIndicator.row.toLocaleString(currentLocale.code)} /{' '}
+            {store.getRowCount().toLocaleString(currentLocale.code)}
+          </div>
+        )}
+
+        {/* Right-Bottom Quick Scroll Navigation Controls */}
+        {store.getRowCount() > 25 && (
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              right: 22,
+              bottom: 18,
+              zIndex: 85,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            <button
+              type="button"
+              title="Scroll to Top"
+              onClick={() => {
+                if (scrollContainerRef.current) {
+                  scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 6,
+                border: `1px solid ${resolvedTheme.dom.popoverBorder}`,
+                backgroundColor: resolvedTheme.dom.popoverBg,
+                color: resolvedTheme.dom.popoverText,
+                boxShadow: resolvedTheme.dom.popoverShadow,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              ⤒
+            </button>
+            <button
+              type="button"
+              title="Scroll to Bottom"
+              onClick={() => {
+                if (scrollContainerRef.current) {
+                  scrollContainerRef.current.scrollTo({
+                    top: scrollContainerRef.current.scrollHeight,
+                    behavior: 'smooth',
+                  });
+                }
+              }}
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 6,
+                border: `1px solid ${resolvedTheme.dom.popoverBorder}`,
+                backgroundColor: resolvedTheme.dom.popoverBg,
+                color: resolvedTheme.dom.popoverText,
+                boxShadow: resolvedTheme.dom.popoverShadow,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              ⤓
+            </button>
+          </div>
+        )}
+
+        {/* Toast Feedback Notification */}
+        {toastMessage && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 200,
+              padding: '7px 14px',
+              borderRadius: 8,
+              backgroundColor:
+                toastMessage.type === 'warning'
+                  ? 'rgba(255, 159, 10, 0.95)'
+                  : toastMessage.type === 'success'
+                  ? 'rgba(48, 209, 88, 0.95)'
+                  : resolvedTheme.dom.popoverBg,
+              color:
+                toastMessage.type === 'warning' || toastMessage.type === 'success'
+                  ? '#FFFFFF'
+                  : resolvedTheme.dom.popoverText,
+              border: `1px solid ${resolvedTheme.dom.popoverBorder}`,
+              boxShadow: resolvedTheme.dom.popoverShadow,
+              fontSize: 12,
+              fontWeight: 600,
+              pointerEvents: 'none',
+            }}
+          >
+            {toastMessage.text}
+          </div>
+        )}
+
+        {/* 4. DYNAMIC MICRO-DOM CELL EDITOR */}
         {activeOverlay && (
           <DynamicCellEditor
             overlay={activeOverlay}
             theme={resolvedTheme}
             locale={currentLocale}
             onCommit={(newVal, moveDir) => {
-              const vRow = store.getViewRow(activeOverlay.row);
-              if (vRow && vRow.type === 'data') {
-                store.setCell(vRow.data.id ?? activeOverlay.row, activeOverlay.column.id, newVal);
-                onCellChange?.(vRow.data, activeOverlay.column.id, newVal);
-              }
+              const targetRow = activeOverlay.row;
+              const targetCol = activeOverlay.column;
               setActiveOverlay(null);
-              if (moveDir === 'down') moveSelection(1, 0);
-              else if (moveDir === 'right') moveSelection(0, 1);
-              else if (moveDir === 'left') moveSelection(0, -1);
-              else requestRender();
+              commitSingleCellEdit(targetRow, targetCol, newVal, true).then(() => {
+                if (moveDir === 'down') moveSelection(1, 0);
+                else if (moveDir === 'right') moveSelection(0, 1);
+                else if (moveDir === 'left') moveSelection(0, -1);
+                else requestRender();
+              });
               containerRef.current?.focus();
             }}
             onCancel={() => {
@@ -761,30 +2515,136 @@ export const SheetGL: React.FC<SheetGLProps> = ({
           />
         )}
 
-        {/* 5. EXCEL TARZI BAŞLIK FİLTRE POPOVER'I */}
+        {/* 5. EXCEL HEADER FILTER POPOVER */}
         {headerFilterState && (
           <HeaderFilterPopover
             column={headerFilterState.column}
             anchorRect={headerFilterState.rect}
+            viewportWidth={gridSurfaceRef.current?.clientWidth || 1000}
             theme={resolvedTheme}
             locale={currentLocale}
             store={store}
-            onApply={(selectedVals) => {
-              if (selectedVals) {
-                store.setFilter([headerFilterState.column.id, 'in', selectedVals]);
-              } else {
-                store.setFilter(null);
-              }
+            activeFilter={columnFilters[headerFilterState.column.id]}
+            onApply={(filterState) => {
+              handleApplyColumnFilter(headerFilterState.column.id, filterState);
               setHeaderFilterState(null);
             }}
+            onSort={(desc) => {
+              const colIdx = geometryRef.current.columns.findIndex(
+                (c) => c.id === headerFilterState.column.id
+              );
+              if (colIdx !== -1) {
+                handleHeaderSort(colIdx, false, desc);
+              }
+            }}
+            onToggleGroup={() => handleToggleGroupColumn(headerFilterState.column.id)}
+            isGrouped={groups.some((g) => g.selector === headerFilterState.column.id)}
             onClose={() => setHeaderFilterState(null)}
+          />
+        )}
+
+        {/* 6. EXCEL & DEVEXTREME RIGHT-CLICK CONTEXT MENU */}
+        {contextMenu && (
+          <ContextMenuOverlay
+            menu={contextMenu}
+            viewportWidth={gridSurfaceRef.current?.clientWidth || 1000}
+            viewportHeight={gridSurfaceRef.current?.clientHeight || 600}
+            theme={resolvedTheme}
+            locale={currentLocale}
+            permissions={permissions}
+            isCellEditable={
+              contextMenu.rowData && contextMenu.column
+                ? canEditCell(contextMenu.rowData, contextMenu.column, contextMenu.row, true)
+                : false
+            }
+            isGroupedByCol={
+              contextMenu.column
+                ? groups.some((g) => g.selector === contextMenu.column!.id)
+                : false
+            }
+            currentSummaryType={
+              contextMenu.column
+                ? store.getSummaryTypes?.()[contextMenu.column.id] || 'none'
+                : 'none'
+            }
+            onCopy={() => {
+              const tsv = buildSelectedTsv();
+              internalClipboardRef.current = tsv;
+              navigator.clipboard?.writeText(tsv).catch(() => {});
+              showToast(
+                currentLocale.code.startsWith('tr')
+                  ? '📋 Kopyalandı (TSV)'
+                  : '📋 Copied to clipboard (TSV)',
+                'info'
+              );
+            }}
+            onPaste={() => {
+              if (navigator.clipboard?.readText) {
+                navigator.clipboard
+                  .readText()
+                  .then((txt) => applyPastedTsv(txt || internalClipboardRef.current))
+                  .catch(() => applyPastedTsv(internalClipboardRef.current));
+              } else {
+                applyPastedTsv(internalClipboardRef.current);
+              }
+            }}
+            onDuplicateCellDown={handleDuplicateCellDown}
+            onDuplicateCellRight={handleDuplicateCellRight}
+            onDuplicateRow={() => handleDuplicateRow(contextMenu.row)}
+            onInsertRowAbove={() => handleInsertRow(Math.max(0, contextMenu.row - 1))}
+            onInsertRowBelow={() => handleInsertRow(contextMenu.row)}
+            onClearCells={handleClearSelectedCells}
+            onDeleteRow={() => handleDeleteRow(contextMenu.row)}
+            onFilterByCellValue={() => {
+              if (contextMenu.column && contextMenu.rowData) {
+                const val = contextMenu.rowData[contextMenu.column.id];
+                handleApplyColumnFilter(contextMenu.column.id, {
+                  columnId: contextMenu.column.id,
+                  mode: 'values',
+                  selectedValues: [val],
+                });
+              }
+            }}
+            onToggleGroupColumn={() => {
+              if (contextMenu.column) {
+                handleToggleGroupColumn(contextMenu.column.id);
+              }
+            }}
+            onSortColumn={(desc) => {
+              handleHeaderSort(contextMenu.col, false, desc);
+            }}
+            onTogglePinColumn={() => {
+              if (contextMenu.column) {
+                handleUpdateColumnDef(contextMenu.column.id, {
+                  pinned: contextMenu.column.pinned ? false : 'left',
+                });
+              }
+            }}
+            onToggleColumnReadonly={() => {
+              if (contextMenu.column) {
+                const nextRO = !contextMenu.column.readonly;
+                handleUpdateColumnDef(contextMenu.column.id, {
+                  readonly: nextRO,
+                  permission: nextRO ? 'readonly' : 'write',
+                });
+              }
+            }}
+            onChangeSummaryType={(sType) => {
+              if (contextMenu.column) {
+                handleChangeSummaryType(contextMenu.column.id, sType);
+              }
+            }}
+            onClose={() => setContextMenu(null)}
           />
         )}
       </div>
 
-      {/* 6. ALT TOPLAM VE ÖZET ŞERİDİ */}
+      {/* 7. CONFIGURABLE SUMMARY FOOTER & LIVE RANGE SELECTION STATS */}
       <SummaryFooter
         summaries={store.getSummaries()}
+        summaryTypes={store.getSummaryTypes?.()}
+        onChangeSummaryType={handleChangeSummaryType}
+        selectionStats={selectionStats}
         columns={columns}
         theme={resolvedTheme}
         locale={currentLocale}
