@@ -1,41 +1,53 @@
-# SheetGL Pro ⚡
+# SheetGL Pro v2.0 Enterprise ⚡
 
 > **Next-Generation High-Performance Canvas DataGrid for React**  
-> Blending **Google Sheets 60 FPS virtualization** with **DevExtreme enterprise feature depth**. Zero dependencies, zero DOM bloat, and 100% free under the **MIT License**.
+> Combining **Google Sheets 60 FPS Canvas virtualization** and **Microsoft Excel UX** with **DevExtreme DataGrid enterprise features** (Event Triggers, Async Cascading Backend Lookups, Dynamic Summaries, Batch CRUD, and Role-Based Permissions). Zero dependencies, zero DOM bloat, **100% Free under the MIT License**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue.svg)](https://www.typescriptlang.org)
-[![Performance](https://img.shields.io/badge/Performance-60_FPS_Canvas-success.svg)](#performance--benchmarks)
-[![i18n](https://img.shields.io/badge/i18n-Pluggable_Locales-orange.svg)](#internationalization-i18n)
+[![Performance](https://img.shields.io/badge/Performance-60_FPS_Canvas-success.svg)](#)
+[![i18n](https://img.shields.io/badge/i18n-Multi--Language-orange.svg)](#)
 
 ---
 
-## 🌟 Key Highlights
+## 🌟 Key Highlights in v2.0
 
-- 🏎️ **Ultra-Fast Canvas Virtualization:** Renders 100,000+ rows and 50+ columns at a steady 60 FPS with zero lag or frame drops.
-- 🆓 **Zero Commercial License Costs:** True open-source alternative to DevExtreme DataGrid and AG-Grid Enterprise ($1,200+/dev/year saved).
-- 🧩 **100% SOLID & Pluggable Architecture:** Every column type is an isolated plugin conforming to `IColumnTypePlugin`. Add custom cells in minutes.
-- 🎨 **Apple HIG & Google Workspace Theming:** Built-in Light and Dark mode presets with glassmorphism and automatic system OS detection.
-- 🌐 **Pluggable i18n Localization:** Primary English (`en-US`) out-of-the-box, with built-in multi-language support (e.g. `tr-TR`) and dynamic custom locale registration.
-- 🔄 **DevExtreme Remote JSON Compatible:** Standard DevExtreme REST DTO format (`skip`, `take`, `sort`, `filter`, `group`, `totalCount`, `summary`) with LRU chunk caching and `AbortController`.
-- 📊 **DevExtreme Enterprise Feature Parity:** Excel-like Header Filter Popover with search, Multi-level drag/select Grouping, Natural Multi-sort (`Shift + Click`), Sticky/Frozen Columns, Summary Footer, Range Selection, and Fill Handle.
+- 🏎️ **Ultra-Fast 60 FPS Canvas Virtualization:** Renders 10,000–100,000+ rows and dozens of columns on a single high-DPI `<canvas>` element with right-side live scroll indicators, quick jump controls (`⤒` / `⤓`), and automatic edge-scrolling during drag operations.
+- 📐 **Complete Microsoft Excel UX:**
+  - **Bottom-Right Fill Handle & Smart AutoFill:** Drag the corner square across rows or columns to duplicate values or auto-increment sequential codes (`ACC-100001` → `ACC-100002`).
+  - **Right-Side Quick Cell Duplicate Handle (`+`):** Click or drag the right-edge `+` pill on any active selection to duplicate cell values.
+  - **Right-Click Context Menu:** Full context menu on cells, row numbers, and column headers (`Duplicate Row`, `Duplicate Cell Down (Ctrl+D)`, `Duplicate Cell Right (Ctrl+R)`, `Insert Row Above/Below`, `Delete Row`, `Filter by Cell Value`, `Pin Column`, `Configure Summary Type`).
+  - **Native Excel TSV Clipboard (`Ctrl+C` / `Ctrl+V`):** Copy and paste multi-row/multi-column ranges directly between Microsoft Excel, Google Sheets, and SheetGL.
+- 🔄 **DevExtreme Event Triggers & Async Cascading Backend Lookups:**
+  - Full lifecycle hooks: `onEditingStart`, `onCellValueChanging`, `onCellValueChanged`, `onRowInserting`, `onRowInserted`, `onRowUpdating`, `onRowUpdated`, `onRowRemoving`, `onRowRemoved`, `onSaving`, `onSaved`.
+  - **Column-Level `setCellValue` Cascading Engine:** When a column value changes (e.g. `city`, `category`, `status`, `balance`), automatically fetch dependent fields from your backend API and update related columns on the row with a live `⟳` row sync indicator!
+- 🔒 **3-Tier Permissions (`write` / `readonly` / `read`):**
+  - Grid-level `permissions`, column-level `permission` (`'write' | 'readonly' | 'read'`), and row/cell conditional `canEdit(row, col)` + `validator(val, row)` rules.
+- 💾 **Batch CRUD & Dirty State Engine:**
+  - Visual green top-right cell triangles for modified cells and green gutter indicators for newly added/duplicated rows.
+  - Atomic **Batch Save**, **Discard Changes**, and 100-step **Undo / Redo (`Ctrl+Z` / `Ctrl+Y`)**.
+- 🧮 **Dynamic Summary Rows & Dual-Mode Excel Header Filters:**
+  - Switch any column's footer & group summary between `SUM`, `AVG`, `MIN`, `MAX`, `COUNT`, or `NONE` at runtime, plus live Excel status bar stats (`Count`, `SUM`, `AVG`, `MIN`, `MAX`) when multiple cells are selected.
+  - Excel Header Filter Popover with **Distinct Value Checkbox List** (preserving checked state across searches and reopenings) and **Condition Rules** (`contains`, `=`, `<>`, `>`, `<`, `between`).
+- 🌗 **Interactive Landing Page & Full Documentation Portal (Dark & Light Mode):**
+  - Switch seamlessly between **Excel Studio**, **Product Landing Page**, and **Interactive Documentation Portal** in both Dark and Light modes (`TR` & `EN`).
 
 ---
 
 ## ⚖️ Comparison: SheetGL vs. Traditional Grids
 
-| Feature | SheetGL Pro | DevExtreme DataGrid | AG-Grid Enterprise | Standard React Table |
+| Feature | SheetGL Pro v2.0 | DevExtreme DataGrid | AG-Grid Enterprise | Standard React Table |
 | :--- | :---: | :---: | :---: | :---: |
-| **Licensing** | **Free (MIT)** | Commercial ($$$) | Commercial ($$$) | Free (MIT) |
+| **Licensing** | **Free (MIT)** | Commercial ($1,200+/yr) | Commercial ($1,200+/yr) | Free (MIT) |
 | **Rendering Engine** | **HTML5 Canvas 2D** | DOM Virtualization | DOM Virtualization | 100% DOM Nodes |
 | **DOM Overhead** | **1 Canvas Element** | 500+ DOM Nodes | 400+ DOM Nodes | 1,000+ DOM Nodes |
 | **Scroll Performance (100k rows)** | **Silky 60 FPS** | 30–45 FPS | 45–55 FPS | Lag / Crash |
 | **Memory Footprint** | **~15 MB** | ~60 MB | ~55 MB | 150+ MB |
-| **Excel Header Filter Popover** | **Built-in** | Built-in | Built-in | ❌ Requires custom code |
-| **Nested Grouping & Summaries** | **Built-in (0ms)** | Built-in | Built-in | ❌ Complex setup |
-| **Remote Operations (DevExtreme DTO)** | **Native** | Native | Proprietary | ❌ Manual |
-| **Apple & Google Dark Themes** | **Built-in** | Manual styling | Material theme | ❌ Unstyled |
+| **Fill Handle & Quick Duplicate** | **Built-in** | ❌ Manual | Plugin | ❌ Not supported |
+| **Async Cascading Lookups** | **Built-in** | Supported | ❌ Complex | ❌ Not supported |
+| **Dual-Mode Excel Filters** | **Built-in** | Built-in | Built-in | ❌ Requires custom code |
+| **Batch CRUD with Dirty Flags** | **Built-in** | Supported | Supported | ❌ Not supported |
 
 ---
 
@@ -51,11 +63,6 @@ pnpm add sheetgl
 # Using yarn
 yarn add sheetgl
 ```
-
-### Peer Dependencies
-- `react`: `^18.0.0` or `^19.0.0`
-- `react-dom`: `^18.0.0` or `^19.0.0`
-- `lucide-react`: `^0.400.0` (for optional popover icons)
 
 ---
 
@@ -76,7 +83,7 @@ export function SimpleGrid() {
     { id: 'id', title: 'ID', type: 'number', width: 60, pinned: 'left' },
     { id: 'name', title: 'Company Name', type: 'text', width: 220, sortable: true, filterable: true },
     { id: 'sector', title: 'Industry Sector', type: 'text', width: 160, groupable: true },
-    { id: 'balance', title: 'Balance ($)', type: 'currency', width: 140, currencySymbol: '$' },
+    { id: 'balance', title: 'Balance ($)', type: 'currency', width: 140, currencySymbol: '$', summaryType: 'sum' },
     { id: 'rating', title: 'Trust Score', type: 'rating', width: 120 },
   ], []);
 
@@ -87,8 +94,8 @@ export function SimpleGrid() {
         columns={columns}
         theme="apple-dark"
         locale="en"
-        onCellChange={(row, colId, newValue) => {
-          console.log('Cell modified:', { row, colId, newValue });
+        onCellValueChanged={(e) => {
+          console.log(`Cell ${e.column.id} changed:`, e.oldValue, '->', e.newValue);
         }}
       />
     </div>
@@ -98,234 +105,36 @@ export function SimpleGrid() {
 
 ---
 
-## 🧱 Core Architecture & SOLID Principles
+## 📚 Comprehensive Documentation
 
-SheetGL is built from the ground up strictly adhering to clean software engineering and SOLID principles:
+Explore detailed architectural guides and API references in the [`docs/`](docs/) directory:
 
-```
-src/datagrid/
-├── core/                  # Pure math & state engines (No React/DOM dependencies)
-│   ├── GeometryEngine.ts  # Prefix-Sum layout & binary-search hit testing
-│   ├── FilterEngine.ts    # DevExtreme composite filter AST evaluator
-│   ├── SortEngine.ts      # Multi-column natural sorting with Intl.Collator
-│   ├── GroupingEngine.ts  # Virtual flattened row projection (VirtualRow[])
-│   ├── SelectionModel.ts  # Active cell & rectangular bounding boxes
-│   └── HistoryManager.ts  # Undo/Redo command stack
-├── columns/               # Open-Closed Principle: Pluggable column plugins
-│   ├── IColumnTypePlugin.ts
-│   ├── ColumnTypeRegistry.ts
-│   └── types/             # Text, Number, Currency, Boolean, Select, Rating, etc.
-├── data/                  # Single Responsibility data store layer
-│   ├── LocalDataStore.ts  # In-memory client-side operations (100k rows)
-│   ├── RemoteDataStore.ts # Remote server-side pagination, sorting & grouping
-│   └── BlockCache.ts      # Chunked LRU block cache for remote records
-├── theme/                 # Dual-Bridge Apple HIG & Google Workspace themes
-│   ├── ThemeEngine.ts
-│   └── presets/           # appleLight, appleDark, googleLight, googleDark
-├── i18n/                  # Pluggable Internationalization Engine
-│   ├── LocaleEngine.ts
-│   └── locales/           # enUS (default), trTR, etc.
-└── ui/                    # React UI & Overlay layers
-    ├── SheetGL.tsx        # High-level entry component
-    ├── ToolBar.tsx        # Search, Quick Grouping & Theme/Locale switcher
-    ├── FormulaBar.tsx     # Google Sheets-style active cell & formula coordinate
-    └── SummaryFooter.tsx  # Aggregate total summary ribbon
-```
+- [**Documentation Index**](docs/INDEX.md)
+- [**Architecture & Technical Design**](docs/ARCHITECTURE.md): Canvas 2D render loop, prefix-sum binary search, zero-DOM vs micro-DOM lifecycle, and dual-bridge theming.
+- [**API Reference**](docs/API_REFERENCE.md): Full TypeScript interfaces for `<SheetGL />`, `ColumnDef`, `IDataStore`, `IColumnTypePlugin`, and `IGridLocale`.
+- [**Custom Column Plugins Guide**](docs/CUSTOM_COLUMN_GUIDE.md): Building Zero-DOM canvas painters and Micro-DOM cell editors.
+- [**Remote Operations & DevExtreme REST DTO Guide**](docs/REMOTE_OPERATIONS_GUIDE.md): Connecting `RemoteDataStore` to server-side APIs with Node.js, ASP.NET Core, and FastAPI backend examples.
 
 ---
 
-## 🎨 Dual-Bridge Theme System
-
-SheetGL includes 4 production-grade themes inspired by modern Apple and Google operating systems:
-- `'apple-light'`: Apple Human Interface Guidelines light aesthetic.
-- `'apple-dark'`: macOS Sonoma translucent dark aesthetic with vibrant contrast badges.
-- `'google-light'`: Google Workspace / Material Design 3 clean layout.
-- `'google-dark'`: Google Workspace dark layout.
-- `'system'`: Automatically tracks and switches based on the user's OS color scheme preference.
-
-```tsx
-<SheetGL
-  dataSource={data}
-  columns={columns}
-  theme="apple-dark"
-/>
-```
-
----
-
-## 🌐 Internationalization (i18n)
-
-SheetGL is built with complete internationalization support. English (`en-US`) is the primary default language, and new locales or partial overrides can be added effortlessly.
-
-### Built-in Locales
-- `en` / `en-US`: English (US) — *Default*
-- `tr` / `tr-TR`: Turkish (TR)
-
-### Changing the Locale
-```tsx
-// Using a built-in locale identifier
-<SheetGL locale="en" ... />
-<SheetGL locale="tr" ... />
-
-// Using custom label overrides
-<SheetGL
-  locale={{
-    searchPlaceholder: 'Quick find...',
-    exportCsv: 'Download Data (.csv)',
-    totalRecords: 'Records Count',
-  }}
-  ...
-/>
-```
-
-### Registering a New Language
-```tsx
-import { LocaleEngine, IGridLocale } from 'sheetgl';
-
-const deDE: IGridLocale = {
-  code: 'de-DE',
-  language: 'Deutsch (DE)',
-  searchPlaceholder: 'In Tabelle suchen (Strg+F)...',
-  addGroup: '+ Zu Gruppe hinzufügen',
-  exportCsv: 'CSV exportieren',
-  rows: 'Zeilen',
-  columns: 'Spalten',
-  systemTheme: 'System (Automatisch)',
-  formulaBarPlaceholder: 'Leer',
-  totalRecords: 'Gesamtanzahl',
-  searchValuesPlaceholder: 'Werte suchen...',
-  selectAll: '(Alles auswählen)',
-  clear: 'Löschen',
-  apply: 'Anwenden',
-  loading: 'Laden...',
-  noMatches: 'Keine Treffer',
-  emptyText: '(Leer)',
-  trueText: 'WAHR',
-  falseText: 'FALSCH',
-  ratingOutOf: (val) => `${val} / 5 Sterne`,
-  groupRecordCount: (count) => `${count.toLocaleString('de-DE')} Datensätze`,
-};
-
-LocaleEngine.registerLocale('de', deDE);
-```
-
----
-
-## 🔌 Pluggable Column Types
-
-SheetGL provides 10 built-in column types:
-
-| Type | Description | Zero-DOM / Micro-DOM |
-| :--- | :--- | :---: |
-| `text` | Standard string text with instant in-place editor | Micro-DOM on edit |
-| `number` | Numeric values with precision formatting | Micro-DOM on edit |
-| `currency` | Currency formatted numbers ($, €, ₺, £, etc.) | Micro-DOM on edit |
-| `boolean` | Interactive iOS-style toggle checkbox | **Zero-DOM** (Direct Canvas Click) |
-| `select` | Pill badges with searchable dropdown menu | Micro-DOM Combobox |
-| `date` | ISO Date formatter and picker | Micro-DOM on edit |
-| `rating` | Interactive 5-star rating widget | **Zero-DOM** (Direct Canvas Click) |
-| `progress` | Color-graded progress bar with percentage | Canvas Paint |
-| `sparkline` | Mini 7-point trend line graph | Canvas Paint |
-| `action` | Clickable action button triggering custom callback | Canvas Paint + Click |
-
-### Creating a Custom Column Plugin
-
-Implement the `IColumnTypePlugin` interface to create your own column type without touching the core grid code:
-
-```tsx
-import { ColumnTypeRegistry, IColumnTypePlugin } from 'sheetgl';
-
-export const CustomBadgePlugin: IColumnTypePlugin = {
-  type: 'customBadge',
-  paint({ ctx, value, x, y, width, height, theme }) {
-    ctx.save();
-    // 1. Draw badge background
-    ctx.fillStyle = theme.isDark ? '#1E293B' : '#E2E8F0';
-    ctx.roundRect(x + 8, y + (height - 22) / 2, width - 16, 22, 6);
-    ctx.fill();
-
-    // 2. Draw text
-    ctx.fillStyle = theme.canvas.cellText;
-    ctx.font = `600 12px ${theme.fontFamily}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(value ?? ''), x + width / 2, y + height / 2);
-    ctx.restore();
-  },
-};
-
-// Register your plugin globally
-ColumnTypeRegistry.register(CustomBadgePlugin);
-```
-
----
-
-## 🌐 Remote Operations & DevExtreme REST DTO Standard
-
-For backend datasets containing millions of records, use `RemoteDataStore`. It communicates using standard DevExtreme REST API JSON conventions, complete with debounce, cancellation tokens, and LRU block caching:
-
-### Client-side Setup
-```tsx
-import { RemoteDataStore, SheetGL } from 'sheetgl';
-
-const remoteStore = new RemoteDataStore({
-  url: 'https://api.yourdomain.com/v1/customers',
-  keyField: 'id',
-  remoteOperations: {
-    filtering: true,
-    sorting: true,
-    grouping: true,
-    paging: true,
-  },
-  chunkSize: 100, // Prefetches in 100-row chunks
-});
-
-<SheetGL dataSource={remoteStore} columns={columns} />
-```
-
-### Backend Request Format (Query Parameters)
-When the user scrolls, sorts, or filters, `RemoteDataStore` sends standard HTTP GET requests:
-```
-GET /v1/customers?skip=200&take=100&sort=[{"selector":"balance","desc":true}]&filter=["status","=","active"]
-```
-
-### Backend JSON Response Format
-Your backend endpoint simply responds with DevExtreme standard JSON:
-```json
-{
-  "data": [
-    { "id": 201, "name": "Acme Corp", "balance": 45000.0, "status": "active" },
-    { "id": 202, "name": "Nexus Tech", "balance": 38200.0, "status": "active" }
-  ],
-  "totalCount": 100000,
-  "summary": {
-    "balance": 8421000.50
-  }
-}
-```
-
----
-
-## ⌨️ Google Sheets Keyboard Shortcuts
+## ⌨️ Google Sheets & Excel Keyboard Shortcuts
 
 - `Arrow Keys`: Move active cell selection.
 - `Tab` / `Shift + Tab`: Move to next/previous cell horizontally.
 - `Enter` / `F2`: Start editing active cell.
 - `Escape`: Cancel editing or clear selection.
-- `Shift + Click`: Natural multi-column sorting (e.g. Sort by Category ASC, then Balance DESC).
-- `Ctrl + C` / `Cmd + C`: Copy selected range as TSV (directly pasteable into Excel or Google Sheets).
-- `Ctrl + V` / `Cmd + V`: Paste TSV matrix into active cell region.
-- `Ctrl + Z` / `Ctrl + Y`: Undo and Redo cell edits.
+- `Ctrl + D`: Duplicate cell value or row downwards.
+- `Ctrl + R`: Duplicate cell value to the right.
+- `Shift + Click`: Multi-column natural sorting.
+- `Ctrl + C` / `Cmd + C`: Copy selected range as TSV (pasteable into Excel & Sheets).
+- `Ctrl + V` / `Cmd + V`: Paste TSV matrix into active cell selection.
+- `Ctrl + Z` / `Ctrl + Y`: Undo and Redo operations (100 steps).
 
 ---
 
 ## 🛠️ Development & Building
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/sheetgl.git
-cd sheetgl
-
 # Install dependencies
 npm install
 
@@ -340,8 +149,4 @@ npm run build
 
 ## 📄 License
 
-This project is licensed under the **MIT License** — you are completely free to use it in commercial applications, client projects, and SaaS platforms without royalty or license keys.
-
----
-
-*Engineered for speed, built with craft.*
+This project is licensed under the **MIT License** — free for commercial and open-source use without license fees or telemetry.
