@@ -17,6 +17,15 @@ export type SingleFilter = [string, FilterOperation, any];
 export type CompositeFilter = (SingleFilter | 'and' | 'or' | CompositeFilter)[];
 export type FilterDescriptor = SingleFilter | CompositeFilter | any[];
 
+export interface ColumnFilterState {
+  columnId: string;
+  mode: 'values' | 'condition';
+  selectedValues?: any[];
+  operator?: FilterOperation;
+  value1?: any;
+  value2?: any;
+}
+
 export interface SortDescriptor {
   selector: string;
   desc: boolean;

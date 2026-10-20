@@ -1,5 +1,5 @@
 import { FilterDescriptor, SortDescriptor, DistinctItem } from './filter';
-import { GroupDescriptor, SummaryDescriptor, VirtualRow } from './group';
+import { GroupDescriptor, SummaryDescriptor, SummaryType, VirtualRow } from './group';
 
 export interface DataGridQuery {
   skip?: number;
@@ -55,11 +55,27 @@ export interface ISortableStore {
 export interface IGroupableStore {
   setGrouping(groupDescriptors: GroupDescriptor[]): Promise<void>;
   toggleGroup(groupKey: string): Promise<void>;
+  expandAllGroups?(): void;
+  collapseAllGroups?(): void;
 }
 
 export interface IMutableStore {
   setCell(rowKey: any, columnId: string, value: any): Promise<void>;
+  setCellsBatch?(updates: Array<{ rowKey: any; columnId: string; value: any }>): Promise<void>;
   commitBatch(changes: BatchChanges): Promise<void>;
+  updateRowFields?(rowKey: any, patch: Record<string, any>): Promise<void>;
+  insertRow?(rowData: Record<string, any>, targetViewRowIndex?: number): Promise<any>;
+  duplicateRow?(rowKey: any, targetViewRowIndex?: number): Promise<any>;
+  deleteRow?(rowKey: any): Promise<void>;
+  restoreRow?(rowData: Record<string, any>, rawIndex?: number): Promise<void>;
+  setBatchMode?(enabled: boolean): void;
+  isBatchMode?(): boolean;
+  getPendingChanges?(): BatchChanges;
+  hasPendingChanges?(): boolean;
+  isCellDirty?(rowKey: any, columnId: string): boolean;
+  isRowInserted?(rowKey: any): boolean;
+  saveBatchChanges?(): Promise<BatchChanges>;
+  discardBatchChanges?(): void;
 }
 
 export interface IDataStore
@@ -69,5 +85,7 @@ export interface IDataStore
     IGroupableStore,
     IMutableStore {
   getSummaries(): Record<string, number> | undefined;
+  getSummaryTypes?(): Record<string, SummaryType>;
+  setSummaryType?(columnId: string, summaryType: SummaryType): void;
   isRemote(): boolean;
 }
