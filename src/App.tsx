@@ -1,7 +1,8 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { SheetGL, ColumnDef, GridEventLogEntry } from './datagrid';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { SheetGL, ColumnDef, GridEventLogEntry, LocaleEngine } from './datagrid';
 import { DocsPortal } from './DocsPortal';
 import { LandingPage } from './LandingPage';
+import { AppView, RouteState, parseLocationPath, buildRoutePath, syncSeoMeta } from './router';
 
 const STATUS_OPTIONS = [
   {
@@ -111,6 +112,45 @@ const COMPLIANCE_MULTI_OPTIONS = [
   },
 ];
 
+const MANAGER_LOOKUP_OPTIONS = [
+  {
+    value: 'MGR-01',
+    label: 'Elena Rostova',
+    subtitle: 'VP of Global Finance',
+    bg: '#EDE9FE',
+    fg: '#5B21B6',
+    darkBg: 'rgba(139, 92, 246, 0.25)',
+    darkFg: '#C4B5FD',
+  },
+  {
+    value: 'MGR-02',
+    label: 'Marcus Vance',
+    subtitle: 'Head of Enterprise Ops',
+    bg: '#DBEAFE',
+    fg: '#1E40AF',
+    darkBg: 'rgba(59, 130, 246, 0.25)',
+    darkFg: '#93C5FD',
+  },
+  {
+    value: 'MGR-03',
+    label: 'Aylin Kaya',
+    subtitle: 'Chief Risk Officer',
+    bg: '#DCFCE7',
+    fg: '#166534',
+    darkBg: 'rgba(34, 197, 94, 0.25)',
+    darkFg: '#86EFAC',
+  },
+  {
+    value: 'MGR-04',
+    label: 'Kenji Takahashi',
+    subtitle: 'Director of Treasury',
+    bg: '#FEF3C7',
+    fg: '#92400E',
+    darkBg: 'rgba(245, 158, 11, 0.25)',
+    darkFg: '#FCD34D',
+  },
+];
+
 const REGION_POLICIES: Record<string, { taxRate: number; rating: number }> = {
   'new york': { taxRate: 21, rating: 5 },
   'san francisco': { taxRate: 22, rating: 5 },
@@ -164,6 +204,11 @@ function generateDemoData(count: number = 10000) {
     'Nova Clean Materials',
     'Horizon Digital Systems',
     'Vanguard Enterprise FinTech',
+    'Atlas Aerospace Systems',
+    'Meridian Capital Partners',
+    'CyberCore Security Group',
+    'Solaris Green Energy',
+    'Omega Autonomous Freight',
   ];
   const tagCombos = [
     ['SOC2', 'GDPR'],
@@ -174,21 +219,36 @@ function generateDemoData(count: number = 10000) {
     ['AISAFE', 'ISO27001'],
   ];
   const cutoffTimes = ['08:30', '09:00', '11:30', '14:00', '16:30', '17:45', '18:00'];
+  const brandColors = ['#38BDF8', '#6366F1', '#8B5CF6', '#10B981', '#F59E0B', '#EC4899'];
+  const tiers = ['Enterprise', 'Strategic', 'Growth', 'Core'];
+  const slas = ['99.99%', '99.95%', '99.90%'];
 
   const rows: any[] = [];
   for (let i = 1; i <= count; i++) {
     const city = cities[i % cities.length];
     const category = categories[i % categories.length];
     const status = STATUS_OPTIONS[i % STATUS_OPTIONS.length];
-    const company = `${companies[i % companies.length]} #${i}`;
+    const company = companies[i % companies.length];
+    const manager = MANAGER_LOOKUP_OPTIONS[i % MANAGER_LOOKUP_OPTIONS.length];
     const balance = Math.round((Math.sin(i) * 50000 + 65000) * 100) / 100;
     const taxRate = REGION_POLICIES[city.toLowerCase()]?.taxRate ?? 20;
     const netBalance = Math.round(balance * (1 - taxRate / 100) * 100) / 100;
+    const yoyGrowth = Math.round(Math.cos(i * 1.3) * 240) / 10;
     const progress = (i * 7) % 101;
     const rating = (i % 5) + 1;
     const isApproved = i % 3 === 0;
     const tags = [...tagCombos[i % tagCombos.length]];
     const cutoffTime = cutoffTimes[i % cutoffTimes.length];
+    const slug = company.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 12);
+    const metadata = {
+      tier: tiers[i % tiers.length],
+      sla: slas[i % slas.length],
+      costCenter: `CC-${200 + (i % 40)}`,
+    };
+    const email = `finance@${slug}.io`;
+    const website = `https://${slug}.io`;
+    const phone = `+1 (${210 + (i % 700)}) ${300 + (i % 600)}-${1000 + (i % 8999)}`;
+    const tagColor = brandColors[i % brandColors.length];
 
     const sparkline = [
       Math.round(Math.abs(Math.sin(i) * 50) + 10),
@@ -210,6 +270,8 @@ function generateDemoData(count: number = 10000) {
       id: i,
       code: `ACC-${100000 + i}`,
       company,
+      managerId: manager.value,
+      metadata,
       city,
       category,
       status: status.value,
@@ -217,12 +279,17 @@ function generateDemoData(count: number = 10000) {
       balance,
       taxRate,
       netBalance,
+      yoyGrowth,
       rating,
       progress,
       sparkline,
       date: `${yr}-${mon}-${day}`,
       lastAuditAt: `${yr}-${mon}-${day} ${hh}:${mm}`,
       cutoffTime,
+      email,
+      website,
+      phone,
+      tagColor,
       isApproved,
     });
   }
@@ -230,9 +297,32 @@ function generateDemoData(count: number = 10000) {
 }
 
 export function App() {
-  const [activeView, setActiveView] = useState<'studio' | 'landing' | 'docs'>('studio');
+  const [route, setRoute] = useState<RouteState>(() =>
+    typeof window !== 'undefined' ? parseLocationPath(window.location.pathname) : { view: 'landing' }
+  );
+  const activeView = route.view;
   const [isDark, setIsDark] = useState<boolean>(true);
-  const [lang, setLang] = useState<'tr' | 'en'>('tr');
+  const [lang, setLang] = useState<'tr' | 'en'>(() => LocaleEngine.detectBrowserLocaleCode());
+
+  const navigate = useCallback((view: AppView, docSection?: string) => {
+    const nextPath = buildRoutePath(view, docSection);
+    if (typeof window !== 'undefined' && window.location.pathname !== nextPath) {
+      window.history.pushState({ view, docSection }, '', nextPath);
+    }
+    setRoute({ view, docSection });
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setRoute(parseLocationPath(window.location.pathname));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
+    syncSeoMeta(route, lang);
+  }, [route, lang]);
   const [showEventDrawer, setShowEventDrawer] = useState<boolean>(false);
   const [lockRejectedRows, setLockRejectedRows] = useState<boolean>(false);
   const [selectedRecordModal, setSelectedRecordModal] = useState<Record<string, any> | null>(null);
@@ -291,10 +381,30 @@ export function App() {
         id: 'company',
         title: lang === 'tr' ? 'Şirket / Organizasyon' : 'Company / Organization',
         type: 'text',
-        width: 230,
+        width: 220,
         pinned: 'left',
         sortable: true,
         filterable: true,
+      },
+      {
+        id: 'managerId',
+        title: lang === 'tr' ? 'Portföy Yöneticisi (Lookup)' : 'Account Manager (Lookup)',
+        type: 'lookup',
+        width: 210,
+        sortable: true,
+        filterable: true,
+        groupable: true,
+        options: MANAGER_LOOKUP_OPTIONS,
+      },
+      {
+        id: 'metadata',
+        title: lang === 'tr' ? 'Meta Veri (Object / JSON)' : 'Metadata (Object / JSON)',
+        type: 'object',
+        width: 245,
+        objectDisplayKey: 'tier',
+        sortable: true,
+        filterable: true,
+        groupable: true,
       },
       {
         id: 'city',
@@ -431,6 +541,17 @@ export function App() {
         summaryType: 'sum',
       },
       {
+        id: 'yoyGrowth',
+        title: lang === 'tr' ? 'Yıllık Büyüme (Percent)' : 'YoY Growth (Percent)',
+        type: 'percent',
+        width: 150,
+        decimalDigits: 1,
+        showVarianceSign: true,
+        sortable: true,
+        filterable: true,
+        summaryType: 'avg',
+      },
+      {
         id: 'isApproved',
         title: lang === 'tr' ? 'Onaylı' : 'Approved',
         type: 'boolean',
@@ -481,6 +602,38 @@ export function App() {
         filterable: true,
       },
       {
+        id: 'email',
+        title: lang === 'tr' ? 'E-Posta (Email)' : 'Contact (Email)',
+        type: 'email',
+        width: 185,
+        sortable: true,
+        filterable: true,
+      },
+      {
+        id: 'website',
+        title: lang === 'tr' ? 'Web Sitesi (URL)' : 'Website (URL)',
+        type: 'url',
+        width: 165,
+        sortable: true,
+        filterable: true,
+      },
+      {
+        id: 'phone',
+        title: lang === 'tr' ? 'Telefon (Phone)' : 'Phone',
+        type: 'phone',
+        width: 155,
+        sortable: true,
+        filterable: true,
+      },
+      {
+        id: 'tagColor',
+        title: lang === 'tr' ? 'Etiket Rengi (Color)' : 'Label Color (Color)',
+        type: 'color',
+        width: 135,
+        sortable: true,
+        filterable: true,
+      },
+      {
         id: 'sparkline',
         title: lang === 'tr' ? '7 Günlük Trend' : '7-Day Trend',
         type: 'sparkline',
@@ -518,172 +671,135 @@ export function App() {
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif",
       }}
     >
-      {/* GLOBAL NAVIGATION HEADER */}
-      <header
-        style={{
-          height: 46,
-          padding: '0 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
-          borderBottom: `1px solid ${isDark ? '#1E293B' : '#E2E8F0'}`,
-          flexShrink: 0,
-          zIndex: 250,
-          userSelect: 'none',
-        }}
-      >
-        {/* Left: Brand & View Switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 14 }}>
-            <span
-              style={{
-                padding: '3px 7px',
-                borderRadius: 6,
-                background: 'linear-gradient(135deg, #0284C7 0%, #4F46E5 100%)',
-                color: '#FFFFFF',
-                fontSize: 11,
-                fontWeight: 900,
-              }}
-            >
-              SGL
-            </span>
-            <span>SheetGL Pro</span>
-            <span
-              style={{
-                fontSize: 10,
-                padding: '1px 6px',
-                borderRadius: 99,
-                backgroundColor: isDark ? 'rgba(56,189,248,0.15)' : 'rgba(2,132,199,0.1)',
-                color: isDark ? '#38BDF8' : '#0284C7',
-                fontWeight: 700,
-              }}
-            >
-              v2.0 Enterprise
-            </span>
-          </div>
+      {/* FLOATING STUDIO NAVIGATION PILL (Only visible in full-screen Studio mode) */}
+      {activeView === 'studio' && (
+        <aside
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 14,
+            zIndex: 350,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '5px 12px',
+            borderRadius: 999,
+            backgroundColor: isDark ? 'rgba(15, 11, 28, 0.88)' : 'rgba(255, 255, 255, 0.94)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: `1px solid ${isDark ? 'rgba(134, 59, 255, 0.3)' : 'rgba(134, 59, 255, 0.2)'}`,
+            boxShadow: isDark
+              ? '0 12px 32px rgba(0, 0, 0, 0.6), 0 0 16px rgba(134, 59, 255, 0.2)'
+              : '0 8px 24px rgba(134, 59, 255, 0.15)',
+            userSelect: 'none',
+          }}
+        >
+          {/* Back to Landing Page */}
+          <button
+            type="button"
+            onClick={() => navigate('landing')}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 7,
+              border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+              backgroundColor: isDark ? 'rgba(134, 59, 255, 0.15)' : 'rgba(134, 59, 255, 0.08)',
+              color: isDark ? '#E9D5FF' : '#7E14FF',
+              fontWeight: 750,
+              fontSize: 11.5,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <span>🏠 {isTR ? 'Ana Sayfa (/)' : 'Home (/)'}</span>
+          </button>
 
-          <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {(
-              [
-                { id: 'studio', labelTr: '📊 Excel Stüdyo (Canlı Tablo)', labelEn: '📊 Excel Studio (Live Grid)' },
-                { id: 'landing', labelTr: '🚀 Tanıtım (Landing Page)', labelEn: '🚀 Landing Page' },
-                { id: 'docs', labelTr: '📚 Dokümantasyon (Docs)', labelEn: '📚 Documentation' },
-              ] as const
-            ).map((tab) => {
-              const active = activeView === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveView(tab.id)}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: 7,
-                    border: 'none',
-                    backgroundColor: active
-                      ? isDark
-                        ? '#1E293B'
-                        : '#E2E8F0'
-                      : 'transparent',
-                    color: active
-                      ? isDark
-                        ? '#38BDF8'
-                        : '#0284C7'
-                      : isDark
-                      ? '#94A3B8'
-                      : '#64748B',
-                    fontWeight: active ? 700 : 600,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {isTR ? tab.labelTr : tab.labelEn}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+          {/* Go to Documentation */}
+          <button
+            type="button"
+            onClick={() => navigate('docs')}
+            style={{
+              padding: '4px 9px',
+              borderRadius: 7,
+              border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+              backgroundColor: 'transparent',
+              color: isDark ? '#CBD5E1' : '#334155',
+              fontWeight: 650,
+              fontSize: 11.5,
+              cursor: 'pointer',
+            }}
+          >
+            📚 {isTR ? 'Doküman (/documentation)' : 'Docs (/documentation)'}
+          </button>
 
-        {/* Right: Event Trigger Drawer Toggle, Conditional Rule Toggle, Language & Dark/Light Mode */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {activeView === 'studio' && (
-            <>
-              <label
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '4px 10px',
-                  borderRadius: 6,
-                  backgroundColor: lockRejectedRows
-                    ? 'rgba(245, 158, 11, 0.16)'
-                    : isDark
-                    ? '#1E293B'
-                    : '#F1F5F9',
-                  color: lockRejectedRows ? '#F59E0B' : isDark ? '#CBD5E1' : '#334155',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-                title={
-                  isTR
-                    ? 'Aktif edildiğinde Durumu "Cancelled" olan satırlar onEditingStart tetikleyicisi ile kilitlenir.'
-                    : 'When checked, rows with Status = Cancelled are locked via onEditingStart.'
-                }
-              >
-                <input
-                  type="checkbox"
-                  checked={lockRejectedRows}
-                  onChange={(e) => setLockRejectedRows(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                <span>
-                  {isTR
-                    ? 'Kural: İptal Edilen Satırları Kilitle'
-                    : 'Rule: Lock Cancelled Rows'}
-                </span>
-              </label>
+          <div style={{ width: 1, height: 16, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)' }} />
 
-              <button
-                type="button"
-                onClick={() => setShowEventDrawer((v) => !v)}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: 7,
-                  border: `1px solid ${showEventDrawer ? '#38BDF8' : isDark ? '#334155' : '#CBD5E1'}`,
-                  backgroundColor: showEventDrawer
-                    ? isDark
-                      ? 'rgba(56, 189, 248, 0.16)'
-                      : 'rgba(2, 132, 199, 0.1)'
-                    : 'transparent',
-                  color: showEventDrawer ? '#38BDF8' : isDark ? '#E2E8F0' : '#1E293B',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                ⚡ {isTR ? `Event Trigger Konsolu (${eventLogs.length})` : `Event Triggers (${eventLogs.length})`}
-              </button>
-            </>
-          )}
+          {/* Lock Cancelled Rows Rule */}
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '2px 6px',
+              fontSize: 11,
+              color: lockRejectedRows ? '#F59E0B' : isDark ? '#94A3B8' : '#64748B',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+            title={
+              isTR
+                ? 'Aktif edildiğinde Durumu "Cancelled" olan satırlar kilitlenir.'
+                : 'When checked, rows with Status = Cancelled are locked.'
+            }
+          >
+            <input
+              type="checkbox"
+              checked={lockRejectedRows}
+              onChange={(e) => setLockRejectedRows(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <span>{isTR ? 'İptalleri Kilitle' : 'Lock Cancelled'}</span>
+          </label>
+
+          {/* Event Trigger Drawer Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowEventDrawer((v) => !v)}
+            style={{
+              padding: '4px 8px',
+              borderRadius: 6,
+              border: `1px solid ${showEventDrawer ? '#38BDF8' : isDark ? '#334155' : '#CBD5E1'}`,
+              backgroundColor: showEventDrawer
+                ? isDark
+                  ? 'rgba(56, 189, 248, 0.16)'
+                  : 'rgba(2, 132, 199, 0.1)'
+                : 'transparent',
+              color: showEventDrawer ? '#38BDF8' : isDark ? '#E2E8F0' : '#1E293B',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            ⚡ {eventLogs.length}
+          </button>
 
           {/* Language Switcher */}
           <button
             type="button"
             onClick={() => setLang((l) => (l === 'tr' ? 'en' : 'tr'))}
             style={{
-              padding: '5px 10px',
-              borderRadius: 7,
+              padding: '4px 8px',
+              borderRadius: 6,
               border: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
-              backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+              backgroundColor: 'transparent',
               color: isDark ? '#F9FAFB' : '#0F172A',
               fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
             }}
           >
-            {lang === 'tr' ? '🇹🇷 TR' : '🇺🇸 EN'}
+            {lang.toUpperCase()}
           </button>
 
           {/* Dark / Light Mode Switcher */}
@@ -691,23 +807,20 @@ export function App() {
             type="button"
             onClick={() => setIsDark((d) => !d)}
             style={{
-              padding: '5px 12px',
-              borderRadius: 7,
+              padding: '4px 8px',
+              borderRadius: 6,
               border: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
-              backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+              backgroundColor: 'transparent',
               color: isDark ? '#FBBF24' : '#0F172A',
               fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
             }}
           >
-            <span>{isDark ? '🌙 Dark Mode' : '☀️ Light Mode'}</span>
+            {isDark ? '🌙' : '☀️'}
           </button>
-        </div>
-      </header>
+        </aside>
+      )}
 
       {/* MAIN VIEWPORT CONTENT */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
@@ -894,8 +1007,10 @@ export function App() {
             lang={lang}
             demoData={data}
             demoColumns={columns}
-            onOpenStudio={() => setActiveView('studio')}
-            onOpenDocs={() => setActiveView('docs')}
+            onOpenStudio={() => navigate('studio')}
+            onOpenDocs={() => navigate('docs')}
+            onToggleTheme={() => setIsDark((d) => !d)}
+            onToggleLang={() => setLang((l) => (l === 'tr' ? 'en' : 'tr'))}
           />
         )}
 
@@ -903,7 +1018,12 @@ export function App() {
           <DocsPortal
             isDark={isDark}
             lang={lang}
-            onOpenStudio={() => setActiveView('studio')}
+            initialSectionId={route.docSection || 'quickstart'}
+            onSectionChange={(secId) => navigate('docs', secId)}
+            onOpenStudio={() => navigate('studio')}
+            onOpenLanding={() => navigate('landing')}
+            onToggleTheme={() => setIsDark((d) => !d)}
+            onToggleLang={() => setLang((l) => (l === 'tr' ? 'en' : 'tr'))}
           />
         )}
 

@@ -51,7 +51,9 @@
 
 ---
 
-## 📦 Installation
+## 📦 Installation & NPX CLI Setup
+
+### 1. Install via Package Manager (`npm` / `pnpm` / `yarn`)
 
 ```bash
 # Using npm
@@ -62,6 +64,19 @@ pnpm add sheetgl
 
 # Using yarn
 yarn add sheetgl
+```
+
+### 2. Instant Setup via `npx sheetgl` CLI
+
+```bash
+# Generate a ready-to-use <SheetGLGrid /> component in your existing React project
+npx sheetgl init
+
+# Or scaffold a complete standalone Vite + React + TypeScript + SheetGL starter app
+npx sheetgl create my-excel-app
+
+# Run diagnostics on package build & environment
+npx sheetgl doctor
 ```
 
 ---
