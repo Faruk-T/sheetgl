@@ -322,7 +322,15 @@ export class CanvasRenderer {
           ctx.lineWidth = 2;
           ctx.strokeRect(rLeftX, rTopY, rWidth, rHeight);
 
+          const activeColDef = geometry.columns[normSel.maxCol];
+          const isSpecialNonDuplicatable =
+            !activeColDef ||
+            activeColDef.type === 'sparkline' ||
+            activeColDef.type === 'action' ||
+            this.isColumnReadonly(activeColDef, permissions);
+
           const canDuplicate =
+            !isSpecialNonDuplicatable &&
             permissions?.mode !== 'read' &&
             permissions?.mode !== 'readonly' &&
             permissions?.allowUpdating !== false &&

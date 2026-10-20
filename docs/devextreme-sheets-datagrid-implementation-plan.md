@@ -1,7 +1,7 @@
-# DevExtreme Alternatifi & Google Sheets Hızında Yeni Nesil DataGrid (SheetGL Pro)
+# WebGL & Canvas Excel DataGrid Mimari Uygulama Planı (SheetGL Pro)
 ## Kapsamlı Mimari & Teknik Uygulama Şartnamesi (Technical Implementation Specification)
 
-Bu doküman; **DevExtreme DataGrid**'in kurumsal yeteneklerini (Gelişmiş Filtreleme, Çoklu Sıralama, Çok Seviyeli Gruplama, Sütun Boyutlandırma/Yeniden Sıralama, Özet Satırları ve **Tam Kapsamlı Remote Operations / Static In-Memory Hibrit Desteği**) **Google Sheets**'in sıfır gecikmeli, 60 FPS Canvas tabanlı 2D sanallaştırma motoruyla birleştiren, **SOLID Prensiplerine %100 Sadık**, **Her Sütun Tipinin Ayrı Dosyada Modüler Olduğu**, **Google & Apple Tasarım Diliyle Uyumlu Dark/Light Tema Sistemine Sahip** ve **tamamen lisanssız (Zero-License & Zero-Dependency Core)** bir React + TypeScript DataGrid mimarisinin detaylı uygulama planıdır.
+Bu doküman; kurumsal veri tablosu yeteneklerini (Gelişmiş Filtreleme, Çoklu Sıralama, Çok Seviyeli Gruplama, Sütun Boyutlandırma/Yeniden Sıralama, Özet Satırları ve **Tam Kapsamlı Remote Operations / Static In-Memory Hibrit Desteği**) **WebGL & HTML5 Canvas**'ın sıfır gecikmeli, 60 FPS 2D sanallaştırma motoruyla birleştiren, **SOLID Prensiplerine %100 Sadık**, **Her Sütun Tipinin Ayrı Dosyada Modüler Olduğu**, **Google & Apple Tasarım Diliyle Uyumlu Dark/Light Tema Sistemine Sahip** ve **tamamen lisanssız (Zero-License & Zero-Dependency Core)** bir React + TypeScript DataGrid mimarisinin detaylı uygulama planıdır.
 
 ---
 
@@ -326,7 +326,7 @@ export type VirtualRow =
 
 ---
 
-## 7. DevExtreme Uyumlu Standart JSON İletişim Protokolü
+## 7. Standart REST JSON İletişim Protokolü (Query DTO)
 
 ### 7.1. Sunucu İstek Formatı (Request Payload)
 ```json

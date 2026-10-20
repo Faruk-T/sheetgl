@@ -15,10 +15,10 @@ Welcome to the official documentation for **SheetGL Pro**, the ultra-fast HTML5 
 - [**Custom Column Plugins Guide**](file:///d:/Works/2026/datagrid/docs/CUSTOM_COLUMN_GUIDE.md)
   Step-by-step tutorial on building custom Zero-DOM canvas painters and Micro-DOM floating cell editors conforming to SOLID principles.
 
-- [**Remote Operations & DevExtreme REST DTO Guide**](file:///d:/Works/2026/datagrid/docs/REMOTE_OPERATIONS_GUIDE.md)
-  Guide to connecting `RemoteDataStore` to server-side APIs using standard DevExtreme JSON queries (`skip`, `take`, `sort`, `filter`, `group`) with ready-to-copy backend code in Node.js, ASP.NET Core, and Python FastAPI.
+- [**Remote Operations & Enterprise REST DTO Guide**](file:///d:/Works/2026/datagrid/docs/REMOTE_OPERATIONS_GUIDE.md)
+  Guide to connecting `RemoteDataStore` to server-side APIs using standard JSON query parameters (`skip`, `take`, `sort`, `filter`, `group`) with ready-to-copy backend code in Node.js, ASP.NET Core, and Python FastAPI.
 
-- [**Original Implementation Specification**](file:///d:/Works/2026/datagrid/docs/devextreme-sheets-datagrid-implementation-plan.md)
+- [**Engineering Architecture Masterplan**](file:///d:/Works/2026/datagrid/docs/devextreme-sheets-datagrid-implementation-plan.md)
   The comprehensive engineering masterplan detailing benchmarks, algorithmic complexity, and feature parity roadmap.
 
 ---

@@ -139,7 +139,7 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({ isDark, lang, onOpenStud
         contentTr: (
           <div>
             <p style={{ lineHeight: 1.7 }}>
-              <strong>SheetGL Pro v2.0</strong>, Google Sheets'in <strong>HTML5 2D Canvas sanallaştırma hızını (60 FPS)</strong> ve Microsoft Excel'in hücre etkileşimlerini, <strong>DevExtreme DataGrid</strong>'in kurumsal olay tetikleyicileri (event triggers), dinamik özetleri, grup motoru ve yetkilendirme mimarisiyle birleştiren sıfır bağımlılıklı React veri tablosudur.
+              <strong>SheetGL Pro v2.0</strong>, <strong>HTML5 2D Canvas & WebGL sanallaştırma hızını (60 FPS)</strong> ve Microsoft Excel'in gelişmiş hücre etkileşimlerini, kurumsal olay yaşam döngüsü (event lifecycle), asenkron backend senkronizasyonu, dinamik özetler ve çok katmanlı yetkilendirme mimarisiyle birleştiren sıfır bağımlılıklı React veri tablosudur.
             </p>
             <CodeBlock
               id="install-cmd"
@@ -190,7 +190,7 @@ export function FinancialGrid() {
         contentEn: (
           <div>
             <p style={{ lineHeight: 1.7 }}>
-              <strong>SheetGL Pro v2.0</strong> combines <strong>Google Sheets 60 FPS HTML5 Canvas virtualization</strong> and native Microsoft Excel interactions with <strong>DevExtreme DataGrid</strong> enterprise event triggers, cascading backend lookups, configurable summaries, and role-based permissions.
+              <strong>SheetGL Pro v2.0</strong> is a high-performance <strong>WebGL & Canvas Excel DataGrid for React</strong> that combines <strong>60 FPS virtualization</strong> and native Microsoft Excel interactions with enterprise event lifecycle triggers, async cascading backend lookups, configurable summaries, and role-based permissions.
             </p>
             <CodeBlock
               id="install-cmd-en"
@@ -414,14 +414,14 @@ export function FinancialGrid() {
       {
         id: 'triggers-cascading',
         badge: '04',
-        titleTr: 'DevExtreme Event Trigger & Backend Dinamik Güncelleme',
-        titleEn: 'DevExtreme Event Triggers & Async Cascading Backend Updates',
+        titleTr: 'Yaşam Döngüsü Olayları & Asenkron Backend Senkronizasyonu',
+        titleEn: 'Lifecycle Event Triggers & Async Cascading Backend Updates',
         descTr: 'Bir sütun güncellendiğinde ilişkili diğer sütunların doğrudan backend API üzerinden çekilip otomatik güncellenmesi.',
         descEn: 'Automatically fetch and update dependent columns from the backend when a column value changes.',
         contentTr: (
           <div>
             <p style={{ lineHeight: 1.7 }}>
-              DevExtreme DataGrid'deki <code>setCellValue</code> ve yaşam döngüsü olay tetikleyicileri (<code>onEditingStart</code>, <code>onCellValueChanging</code>, <code>onCellValueChanged</code>, <code>onRowInserting</code>, <code>onRowUpdating</code>, <code>onSaving</code>, <code>onSaved</code>) SheetGL'de birinci sınıf (first-class) asenkron mimariyle desteklenir.
+              Gelişmiş kurumsal tablolardaki <code>setCellValue</code> ve tam kapsamlı yaşam döngüsü olay tetikleyicileri (<code>onEditingStart</code>, <code>onCellValueChanging</code>, <code>onCellValueChanged</code>, <code>onRowInserting</code>, <code>onRowUpdating</code>, <code>onSaving</code>, <code>onSaved</code>) SheetGL'de birinci sınıf (first-class) asenkron mimariyle desteklenir.
             </p>
             <Callout type="tip" title="Asenkron Backend Cascading Güncellemesi Nasıl Çalışır?">
               Bir sütunun <code>setCellValue</code> veya tablonun <code>onCellValueChanged</code> kancası bir <code>Promise</code> döndürdüğünde, SheetGL ilgili satırın sol numara sütununda canlı bir <code>⟳</code> senkronizasyon göstergesi çizer, backend yanıtını bekler ve dönen bağımlı sütun değerlerini (ör. Vergi Oranı, Net Bakiye, Bölge Yöneticisi, Risk Skoru) aynı satırda otomatik olarak günceller! Üstelik <code>Ctrl + Z</code> yaptığınızda hem ana hücre hem de backend'den güncellenen tüm bağımlı sütunlar tek adımda geri alınır.
@@ -429,7 +429,7 @@ export function FinancialGrid() {
 
             <CodeBlock
               id="cascading-code"
-              title="Cascading Backend Lookup & DevExtreme Event Triggers"
+              title="Cascading Backend Lookup & Lifecycle Event Triggers"
               code={`const columns: ColumnDef[] = [
   {
     id: 'city',
@@ -482,11 +482,11 @@ export function FinancialGrid() {
         contentEn: (
           <div>
             <p style={{ lineHeight: 1.7 }}>
-              SheetGL implements DevExtreme's complete event lifecycle (<code>onEditingStart</code>, <code>onCellValueChanging</code>, <code>onCellValueChanged</code>, <code>onRowInserting</code>, <code>onRowInserted</code>, <code>onRowUpdating</code>, <code>onRowUpdated</code>, <code>onRowRemoving</code>, <code>onRowRemoved</code>, <code>onSaving</code>, <code>onSaved</code>) plus column-level <code>setCellValue</code> cascading hooks.
+              SheetGL implements an enterprise-grade reactive event lifecycle (<code>onEditingStart</code>, <code>onCellValueChanging</code>, <code>onCellValueChanged</code>, <code>onRowInserting</code>, <code>onRowInserted</code>, <code>onRowUpdating</code>, <code>onRowUpdated</code>, <code>onRowRemoving</code>, <code>onRowRemoved</code>, <code>onSaving</code>, <code>onSaved</code>) plus column-level <code>setCellValue</code> cascading hooks.
             </p>
             <CodeBlock
               id="cascading-code-en"
-              title="Cascading Backend Lookup & DevExtreme Event Triggers"
+              title="Cascading Backend Lookup & Lifecycle Event Triggers"
               code={`const columns: ColumnDef[] = [
   {
     id: 'city',

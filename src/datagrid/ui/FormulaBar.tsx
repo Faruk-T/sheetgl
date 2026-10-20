@@ -14,6 +14,7 @@ export interface FormulaBarProps {
   onDuplicateDown?: () => void;
   onDuplicateRight?: () => void;
   onDuplicateRow?: () => void;
+  onOpenSparklineModal?: () => void;
   theme: IGridThemeTokens;
   locale?: IGridLocale;
 }
@@ -39,18 +40,23 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   onDuplicateDown,
   onDuplicateRight,
   onDuplicateRow,
+  onOpenSparklineModal,
   theme,
   locale,
 }) => {
   const isTR = locale?.code?.startsWith('tr');
-  const displayVal =
-    currentValue != null
-      ? Array.isArray(currentValue)
-        ? currentValue.join(', ')
-        : typeof currentValue === 'object'
-        ? JSON.stringify(currentValue)
-        : String(currentValue)
-      : '';
+  const isSparkline = column?.type === 'sparkline';
+  const displayVal = isSparkline
+    ? isTR
+      ? '📈 [7 Günlük Trend Grafiği — Detaylı grafik görünümü için hücreye tıklayın]'
+      : '📈 [7-Day Trend Chart — Click cell to open detailed chart dialog]'
+    : currentValue != null
+    ? Array.isArray(currentValue)
+      ? currentValue.join(', ')
+      : typeof currentValue === 'object'
+      ? JSON.stringify(currentValue)
+      : String(currentValue)
+    : '';
 
   const [draft, setDraft] = useState<string>(displayVal);
   const [isFocused, setIsFocused] = useState<boolean>(false);
@@ -194,47 +200,68 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
 
       {/* Quick Cell & Row Duplication Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {onDuplicateDown && (
+        {isSparkline && onOpenSparklineModal ? (
           <button
             type="button"
-            disabled={!canDuplicate || !isEditable}
-            onClick={onDuplicateDown}
-            title={isTR ? 'Hücreyi Aşağı Çoğalt (Ctrl+D)' : 'Duplicate Cell Down (Ctrl+D)'}
+            onClick={onOpenSparklineModal}
             style={{
-              padding: '2px 7px',
+              padding: '2px 10px',
               fontSize: 11,
               borderRadius: 4,
-              border: `1px solid ${theme.canvas.gridLine}`,
-              backgroundColor: theme.canvas.bg,
-              color: theme.canvas.cellText,
-              cursor: canDuplicate && isEditable ? 'pointer' : 'not-allowed',
-              opacity: canDuplicate && isEditable ? 1 : 0.45,
-              fontWeight: 600,
+              border: `1px solid ${theme.dom.accentColor}`,
+              backgroundColor: theme.dom.accentColor,
+              color: '#FFFFFF',
+              cursor: 'pointer',
+              fontWeight: 700,
             }}
           >
-            ⬇ {isTR ? 'Aşağı Çoğalt' : 'Fill Down'}
+            📈 {isTR ? 'Detaylı Trend Grafiğini Aç' : 'Open Detailed Chart'}
           </button>
-        )}
-        {onDuplicateRight && (
-          <button
-            type="button"
-            disabled={!canDuplicate}
-            onClick={onDuplicateRight}
-            title={isTR ? 'Hücreyi Sağa Çoğalt (Ctrl+R)' : 'Duplicate Cell Right (Ctrl+R)'}
-            style={{
-              padding: '2px 7px',
-              fontSize: 11,
-              borderRadius: 4,
-              border: `1px solid ${theme.canvas.gridLine}`,
-              backgroundColor: theme.canvas.bg,
-              color: theme.canvas.cellText,
-              cursor: canDuplicate ? 'pointer' : 'not-allowed',
-              opacity: canDuplicate ? 1 : 0.45,
-              fontWeight: 600,
-            }}
-          >
-            ➡ {isTR ? 'Sağa Çoğalt' : 'Fill Right'}
-          </button>
+        ) : (
+          <>
+            {onDuplicateDown && (
+              <button
+                type="button"
+                disabled={!canDuplicate || !isEditable}
+                onClick={onDuplicateDown}
+                title={isTR ? 'Hücreyi Aşağı Çoğalt (Ctrl+D)' : 'Duplicate Cell Down (Ctrl+D)'}
+                style={{
+                  padding: '2px 7px',
+                  fontSize: 11,
+                  borderRadius: 4,
+                  border: `1px solid ${theme.canvas.gridLine}`,
+                  backgroundColor: theme.canvas.bg,
+                  color: theme.canvas.cellText,
+                  cursor: canDuplicate && isEditable ? 'pointer' : 'not-allowed',
+                  opacity: canDuplicate && isEditable ? 1 : 0.45,
+                  fontWeight: 600,
+                }}
+              >
+                ⬇ {isTR ? 'Aşağı Çoğalt' : 'Fill Down'}
+              </button>
+            )}
+            {onDuplicateRight && (
+              <button
+                type="button"
+                disabled={!canDuplicate || !isEditable}
+                onClick={onDuplicateRight}
+                title={isTR ? 'Hücreyi Sağa Çoğalt (Ctrl+R)' : 'Duplicate Cell Right (Ctrl+R)'}
+                style={{
+                  padding: '2px 7px',
+                  fontSize: 11,
+                  borderRadius: 4,
+                  border: `1px solid ${theme.canvas.gridLine}`,
+                  backgroundColor: theme.canvas.bg,
+                  color: theme.canvas.cellText,
+                  cursor: canDuplicate && isEditable ? 'pointer' : 'not-allowed',
+                  opacity: canDuplicate && isEditable ? 1 : 0.45,
+                  fontWeight: 600,
+                }}
+              >
+                ➡ {isTR ? 'Sağa Çoğalt' : 'Fill Right'}
+              </button>
+            )}
+          </>
         )}
         {onDuplicateRow && (
           <button

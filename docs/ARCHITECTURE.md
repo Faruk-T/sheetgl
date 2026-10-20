@@ -82,7 +82,7 @@ export type VirtualRow =
   Recursive group summaries (sum, avg, count, min, max) are calculated in a single linear pass and stored directly in group header nodes.
 
 ### 2.3. FilterEngine (`FilterEngine.ts`)
-Evaluates DevExtreme-compatible composite abstract syntax tree (AST) filter expressions:
+Evaluates composite abstract syntax tree (AST) filter expressions:
 
 ```ts
 type FilterDescriptor =
@@ -143,7 +143,7 @@ SheetGL provides two interchangeable implementations of `IDataStore`:
 ### 4.2. RemoteDataStore (`RemoteDataStore.ts`)
 - **Use Case:** Millions of records residing on backend servers (SQL, Elasticsearch, MongoDB).
 - **Behavior:**
-  - Offloads `skip`, `take`, `sort`, `filter`, and `group` operations to the backend REST API using standard DevExtreme query conventions.
+  - Offloads `skip`, `take`, `sort`, `filter`, and `group` operations to the backend REST API using standard query conventions.
   - **Chunked LRU Block Caching (`BlockCache.ts`):** Caches records in configurable chunks (e.g. 100 rows per chunk) with a Least Recently Used eviction policy.
   - **AbortController:** Fast scrolling automatically cancels obsolete in-flight HTTP requests, avoiding race conditions and saving server bandwidth.
 

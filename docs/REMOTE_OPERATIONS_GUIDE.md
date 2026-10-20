@@ -1,6 +1,6 @@
-# Remote Operations & DevExtreme REST DTO Guide
+# Remote Operations & Enterprise REST DTO Guide
 
-SheetGL is natively designed to operate over datasets with millions of rows by delegating pagination, sorting, filtering, and grouping to server-side endpoints using the **DevExtreme REST DTO convention**.
+SheetGL is natively designed to operate over datasets with millions of rows by delegating pagination, sorting, filtering, and grouping to server-side endpoints using a **Standard Enterprise REST DTO convention**.
 
 ---
 
@@ -19,7 +19,7 @@ GET /api/v1/customers?skip=0&take=100&sort=[{"selector":"balance","desc":true}]&
 | `skip` | `number` | `100` | The number of records to skip (paging offset). |
 | `take` | `number` | `50` | The number of records to return (page size). |
 | `sort` | `JSON string` | `[{"selector":"name","desc":false}]` | Array of sort criteria. |
-| `filter` | `JSON string` | `["status","=","active"]` | DevExtreme binary or composite AST filter expressions. |
+| `filter` | `JSON string` | `["status","=","active"]` | Standard binary or composite AST filter expressions. |
 | `group` | `JSON string` | `[{"selector":"city","isExpanded":false}]` | Grouping criteria. |
 | `requireTotalCount`| `boolean` | `true` | Requests the total count of matching records across all pages. |
 
@@ -128,9 +128,9 @@ app.get('/api/v1/customers', async (req: Request, res: Response) => {
 });
 ```
 
-### 4.2. ASP.NET Core (.NET 8/9 with DevExtreme.AspNet.Data)
+### 4.2. ASP.NET Core (.NET 8/9 with DataSourceLoader)
 
-If you are migrating from DevExtreme, `RemoteDataStore` is a direct drop-in replacement:
+`RemoteDataStore` seamlessly integrates with ASP.NET Core data loaders:
 
 ```csharp
 [HttpGet]

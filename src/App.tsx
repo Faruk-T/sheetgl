@@ -270,6 +270,7 @@ export function App() {
         id: 'id',
         title: 'ID',
         type: 'number',
+        decimalDigits: 0,
         width: 68,
         pinned: 'left',
         readonly: true,
@@ -304,7 +305,7 @@ export function App() {
         filterable: true,
         groupable: true,
         options: CITY_DROPDOWN_OPTIONS,
-        // DevExtreme-style Async Backend Cascading Lookup:
+        // Enterprise Async Backend Cascading Lookup:
         // Changing 'city' fetches tax policy & trust score from backend and updates taxRate, netBalance & rating!
         setCellValue: async (newData, newCity, currentRow) => {
           pushEventLog(
@@ -782,7 +783,7 @@ export function App() {
               />
             </div>
 
-            {/* LIVE DEVEXTREME EVENT TRIGGER & CASCADING BACKEND CONSOLE DRAWER */}
+            {/* LIVE ENTERPRISE EVENT TRIGGER & CASCADING BACKEND CONSOLE DRAWER */}
             {showEventDrawer && (
               <aside
                 style={{
@@ -807,7 +808,7 @@ export function App() {
                 >
                   <div>
                     <div style={{ fontWeight: 800, fontSize: 13 }}>
-                      ⚡ {isTR ? 'DevExtreme Event & Backend Log' : 'DevExtreme Event & Backend Log'}
+                      ⚡ {isTR ? 'Etkinlik & Backend API Konsolu' : 'Live Event & Backend API Console'}
                     </div>
                     <div style={{ fontSize: 11, color: '#94A3B8' }}>
                       {isTR

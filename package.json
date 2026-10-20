@@ -1,7 +1,7 @@
 {
   "name": "sheetgl",
   "version": "1.0.0",
-  "description": "High-performance Canvas-based DataGrid for React combining Google Sheets speed with DevExtreme enterprise features. Zero dependencies, MIT licensed.",
+  "description": "High-performance WebGL & Canvas Excel DataGrid for React with 60 FPS virtualization, batch CRUD, rich plugins, and zero dependencies. MIT licensed.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,11 +13,11 @@
   "homepage": "https://github.com/umitunc/sheetgl#readme",
   "keywords": [
     "datagrid",
-    "canvas",
+    "webgl-datagrid",
+    "canvas-datagrid",
+    "excel-datagrid",
     "react",
     "spreadsheet",
-    "google-sheets",
-    "devextreme-alternative",
     "virtualized-grid",
     "data-table",
     "high-performance"

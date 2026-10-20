@@ -49,7 +49,7 @@ export interface SheetGLProps {
   onPermissionsChange?: (permissions: GridPermissions) => void;
   onCellChange?: (row: any, columnId: string, value: any) => void;
 
-  // DevExtreme-Style Lifecycle Event Triggers
+  // Enterprise Lifecycle Event Triggers
   onEditingStart?: (e: EditingStartEvent) => void;
   onCellValueChanging?: (e: CellValueChangingEvent) => void;
   onCellValueChanged?: (
@@ -445,7 +445,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   );
 
   // ============================================================================
-  // UNIFIED CELL MUTATION & DEVEXTREME CASCADING TRIGGER PIPELINE
+  // UNIFIED CELL MUTATION & CASCADING TRIGGER PIPELINE
   // ============================================================================
   const commitSingleCellEdit = useCallback(
     async (
@@ -479,7 +479,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         }
       }
 
-      // 2. DevExtreme onCellValueChanging Trigger
+      // 2. Lifecycle onCellValueChanging Trigger
       let finalValue = newValue;
       if (onCellValueChanging) {
         const changingEvt: CellValueChangingEvent = {
@@ -501,7 +501,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         finalValue = changingEvt.newValue;
       }
 
-      // 3. DevExtreme onRowUpdating Trigger
+      // 3. Lifecycle onRowUpdating Trigger
       if (onRowUpdating) {
         const rowUpdEvt: RowUpdatingEvent = {
           key: rowKey,
@@ -546,7 +546,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         }
       }
 
-      // 6. DevExtreme onCellValueChanged Trigger (supports sync or async backend patch)
+      // 6. Lifecycle onCellValueChanged Trigger (supports sync or async backend patch)
       if (onCellValueChanged) {
         try {
           const changedEvt: CellValueChangedEvent = {
@@ -2643,7 +2643,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
           />
         )}
 
-        {/* 6. EXCEL & DEVEXTREME RIGHT-CLICK CONTEXT MENU */}
+        {/* 6. EXCEL RIGHT-CLICK CONTEXT MENU */}
         {contextMenu && (
           <ContextMenuOverlay
             menu={contextMenu}

@@ -63,7 +63,7 @@ export interface ColumnDef {
   summaryType?: SummaryType;
 
   /**
-   * Conditional permission callback per row/cell (DevExtreme-style allowEditing rule)
+   * Conditional permission callback per row/cell (cell-level allowEditing rule)
    */
   canEdit?: (row: any, column: ColumnDef) => boolean;
 
@@ -73,7 +73,7 @@ export interface ColumnDef {
   validator?: (value: any, row: any) => { valid: boolean; message?: string } | boolean;
 
   /**
-   * DevExtreme-style setCellValue cascading hook (sync or async backend fetch).
+   * Enterprise setCellValue cascading hook (sync or async backend fetch).
    * Can mutate `newData` or return a Promise resolving to a partial row patch fetched from backend.
    */
   setCellValue?: (

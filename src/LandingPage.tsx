@@ -47,7 +47,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         },
         {
           icon: '🔄',
-          title: 'DevExtreme Event Trigger & Backend Cascade',
+          title: 'Yaşam Döngüsü Olayları & Backend Senkronizasyonu',
           desc: 'Bir sütun güncellendiğinde (ör. Şehir, Sektör veya Bakiye) ilişkili diğer sütunları doğrudan backend API’den çekerek satırı canlı senkronize eder.',
         },
         {
@@ -79,7 +79,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         },
         {
           icon: '🔄',
-          title: 'DevExtreme Triggers & Backend Cascade',
+          title: 'Lifecycle Triggers & Backend Cascade',
           desc: 'When a cell changes (e.g. City, Sector, or Balance), automatically fetches dependent fields from the backend and updates the row in real time.',
         },
         {
@@ -134,7 +134,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         >
           <span>✨ SHEETGL PRO v2.0 ENTERPRISE</span>
           <span>•</span>
-          <span>{isTR ? 'EXCEL UX + DEVEXTREME GÜCÜ' : 'EXCEL UX + DEVEXTREME POWER'}</span>
+          <span>{isTR ? 'EXCEL UX + WEBGL HIZI' : 'EXCEL UX + WEBGL 60 FPS SPEED'}</span>
         </div>
 
         <h1
@@ -148,8 +148,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           }}
         >
           {isTR
-            ? 'React İçin 60 FPS Excel Deneyimi ve DevExtreme Kurumsal Veri Tablosu'
-            : 'The 60 FPS Excel Experience & DevExtreme Enterprise DataGrid for React'}
+            ? 'React İçin 60 FPS WebGL & Canvas Excel DataGrid'
+            : 'Next-Gen WebGL & Canvas Excel DataGrid for React'}
         </h1>
 
         <p
@@ -163,7 +163,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         >
           {isTR
             ? 'Hücre ve satır çoğaltma (Fill Handle & Sağ Tık), rol bazlı yetkilendirme (Write / ReadOnly), toplu kayıt (Batch CRUD), dinamik alt özetler ve bir sütun güncellendiğinde diğer sütunların doğrudan backend’den çekilip güncellenmesini sağlayan olay tetikleyicileri.'
-            : 'Cell & row duplication (Fill Handle & Right-Click), role-based permissions (Write / ReadOnly), Batch CRUD, dynamic summaries, and DevExtreme event triggers with automatic cascading backend updates.'}
+            : 'Cell & row duplication (Fill Handle & Right-Click), role-based permissions (Write / ReadOnly), Batch CRUD, dynamic summaries, and reactive event triggers with automatic cascading backend updates.'}
         </p>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 36 }}>

@@ -39,6 +39,7 @@ export interface ContextMenuOverlayProps {
   onTogglePinColumn: () => void;
   onToggleColumnReadonly: () => void;
   onChangeSummaryType: (summaryType: SummaryType) => void;
+  onOpenSparklineModal?: () => void;
   onClose: () => void;
 }
 
@@ -67,6 +68,7 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
   onTogglePinColumn,
   onToggleColumnReadonly,
   onChangeSummaryType,
+  onOpenSparklineModal,
   onClose,
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -202,6 +204,36 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
       }}
     >
       {menu.targetType === 'header' && menu.column ? (
+        menu.column.type === 'sparkline' || menu.column.type === 'action' ? (
+          <>
+            <div
+              style={{
+                padding: '5px 10px',
+                fontSize: 11,
+                fontWeight: 700,
+                color: theme.dom.accentColor,
+                borderBottom: `1px solid ${theme.dom.popoverBorder}`,
+                marginBottom: 4,
+                display: 'flex',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span>{menu.column.title}</span>
+              <span>{menu.column.type.toUpperCase()}</span>
+            </div>
+            {renderItem(
+              menu.column.pinned
+                ? isTR
+                  ? '📌 Sabitlemeyi Kaldır (Unpin)'
+                  : '📌 Unpin Column'
+                : isTR
+                ? '📌 Sola Sabitle (Pin Left)'
+                : '📌 Pin Column Left',
+              undefined,
+              onTogglePinColumn
+            )}
+          </>
+        ) : (
         <>
           <div
             style={{
@@ -307,6 +339,31 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
               );
             })}
           </div>
+        </>
+        )
+      ) : menu.column?.type === 'sparkline' ? (
+        <>
+          <div
+            style={{
+              padding: '5px 10px',
+              fontSize: 11,
+              fontWeight: 700,
+              color: theme.dom.accentColor,
+              borderBottom: `1px solid ${theme.dom.popoverBorder}`,
+              marginBottom: 4,
+              display: 'flex',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>📈 {menu.column.title}</span>
+            <span>CHART</span>
+          </div>
+          {onOpenSparklineModal &&
+            renderItem(
+              isTR ? '📈 Detaylı Trend Grafiğini Görüntüle' : '📈 View Detailed Trend Chart',
+              'Enter',
+              onOpenSparklineModal
+            )}
         </>
       ) : (
         <>

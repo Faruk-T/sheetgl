@@ -1,7 +1,7 @@
 # SheetGL Pro v2.0 Enterprise ⚡
 
-> **Next-Generation High-Performance Canvas DataGrid for React**  
-> Combining **Google Sheets 60 FPS Canvas virtualization** and **Microsoft Excel UX** with **DevExtreme DataGrid enterprise features** (Event Triggers, Async Cascading Backend Lookups, Dynamic Summaries, Batch CRUD, and Role-Based Permissions). Zero dependencies, zero DOM bloat, **100% Free under the MIT License**.
+> **Next-Generation High-Performance WebGL & Canvas Excel DataGrid for React**  
+> Combining **GPU-Accelerated 60 FPS Canvas Virtualization** and **Microsoft Excel UX** with **Enterprise DataGrid Architecture** (Full Event Lifecycle, Async Cascading Backend Lookups, Dynamic Summaries, Batch CRUD, and Role-Based Permissions). Zero dependencies, zero DOM bloat, **100% Free under the MIT License**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
@@ -19,7 +19,7 @@
   - **Right-Side Quick Cell Duplicate Handle (`+`):** Click or drag the right-edge `+` pill on any active selection to duplicate cell values.
   - **Right-Click Context Menu:** Full context menu on cells, row numbers, and column headers (`Duplicate Row`, `Duplicate Cell Down (Ctrl+D)`, `Duplicate Cell Right (Ctrl+R)`, `Insert Row Above/Below`, `Delete Row`, `Filter by Cell Value`, `Pin Column`, `Configure Summary Type`).
   - **Native Excel TSV Clipboard (`Ctrl+C` / `Ctrl+V`):** Copy and paste multi-row/multi-column ranges directly between Microsoft Excel, Google Sheets, and SheetGL.
-- 🔄 **DevExtreme Event Triggers & Async Cascading Backend Lookups:**
+- 🔄 **Enterprise Event Triggers & Async Cascading Backend Lookups:**
   - Full lifecycle hooks: `onEditingStart`, `onCellValueChanging`, `onCellValueChanged`, `onRowInserting`, `onRowInserted`, `onRowUpdating`, `onRowUpdated`, `onRowRemoving`, `onRowRemoved`, `onSaving`, `onSaved`.
   - **Column-Level `setCellValue` Cascading Engine:** When a column value changes (e.g. `city`, `category`, `status`, `balance`), automatically fetch dependent fields from your backend API and update related columns on the row with a live `⟳` row sync indicator!
 - 🔒 **3-Tier Permissions (`write` / `readonly` / `read`):**
@@ -37,7 +37,7 @@
 
 ## ⚖️ Comparison: SheetGL vs. Traditional Grids
 
-| Feature | SheetGL Pro v2.0 | DevExtreme DataGrid | AG-Grid Enterprise | Standard React Table |
+| Feature | SheetGL Pro v2.0 | Traditional Enterprise Grids | AG-Grid Enterprise | Standard React Table |
 | :--- | :---: | :---: | :---: | :---: |
 | **Licensing** | **Free (MIT)** | Commercial ($1,200+/yr) | Commercial ($1,200+/yr) | Free (MIT) |
 | **Rendering Engine** | **HTML5 Canvas 2D** | DOM Virtualization | DOM Virtualization | 100% DOM Nodes |
@@ -113,7 +113,7 @@ Explore detailed architectural guides and API references in the [`docs/`](docs/)
 - [**Architecture & Technical Design**](docs/ARCHITECTURE.md): Canvas 2D render loop, prefix-sum binary search, zero-DOM vs micro-DOM lifecycle, and dual-bridge theming.
 - [**API Reference**](docs/API_REFERENCE.md): Full TypeScript interfaces for `<SheetGL />`, `ColumnDef`, `IDataStore`, `IColumnTypePlugin`, and `IGridLocale`.
 - [**Custom Column Plugins Guide**](docs/CUSTOM_COLUMN_GUIDE.md): Building Zero-DOM canvas painters and Micro-DOM cell editors.
-- [**Remote Operations & DevExtreme REST DTO Guide**](docs/REMOTE_OPERATIONS_GUIDE.md): Connecting `RemoteDataStore` to server-side APIs with Node.js, ASP.NET Core, and FastAPI backend examples.
+- [**Remote Operations & Enterprise REST DTO Guide**](docs/REMOTE_OPERATIONS_GUIDE.md): Connecting `RemoteDataStore` to server-side APIs with Node.js, ASP.NET Core, and FastAPI backend examples.
 
 ---
 
