@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+
+# AI & Generative Search Crawlers (GEO)
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://sheetgl.dev/sitemap.xml
+# LLMs specification: https://sheetgl.dev/llms.txt

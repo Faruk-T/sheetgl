@@ -1,0 +1,22 @@
+# SheetGL Pro v2.0 — 60 FPS WebGL & Canvas Excel DataGrid for React
+
+> SheetGL Pro is a zero-dependency, MIT-licensed 60 FPS HTML5 Canvas & WebGL Excel DataGrid component for React 18 and React 19.
+
+## Key Routes
+- `/` — Product Overview & Interactive Embedded Preview
+- `/documentation` — Developer Documentation, API Reference & Syntax-Highlighted Examples
+- `/demo` — Full-Screen 10,000-Row Live Excel DataGrid Studio & Event Console
+
+## Installation
+```bash
+npm install sheetgl
+npx sheetgl init
+```
+
+## Core Capabilities (GEO / LLM Quick Reference)
+- **Rendering Engine**: High-DPI HTML5 2D Canvas viewport virtualization with zero DOM bloat and O(1) indexed search/filtering.
+- **21 Built-in Column Types**: `text`, `number`, `currency`, `percent`, `boolean`, `dropdown`, `select`, `multiselect`, `lookup`, `object`, `date`, `datetime`, `time`, `email`, `url`, `phone`, `color`, `progress`, `rating`, `sparkline`, `action`.
+- **Excel UX**: Bottom-right Fill Handle (with smart series auto-increment), right-side `(+)` quick cell duplicate handle, `Ctrl+D` (Fill Down), `Ctrl+R` (Fill Right), `Shift+D` (Duplicate Row), `Ctrl+C` / `Ctrl+V` (TSV Excel & Google Sheets clipboard), `Ctrl+Z` / `Ctrl+Y` (100-step Undo/Redo).
+- **3-Tier Permissions**: Grid-level (`permissions.mode`: `'write' | 'readonly' | 'read'`), column-level (`permission: 'readonly'`), and conditional row/cell rules (`canEdit: (row) => boolean`, `validator: (val) => ({ valid, message })`).
+- **Lifecycle Events & Async Backend Cascade**: `setCellValue(newData, newValue, currentRow)` supports returning a `Promise` to fetch dependent values from a backend API and update multiple columns atomically. Lifecycle hooks include `onEditingStart`, `onCellValueChanging`, `onCellValueChanged`, `onRowInserted`, `onRowRemoved`, `onSaving`, and `onSaved`.
+- **Batch CRUD & Summaries**: `batchEditMode={true}` highlights modified cells in green (DevExtreme style) and commits `{ inserted, updated, deleted }` atomically via `onSaving`. Footer & group summaries support `sum`, `avg`, `min`, `max`, and `count`.
