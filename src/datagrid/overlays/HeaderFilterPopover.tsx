@@ -98,7 +98,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
     if (column.type === 'boolean') {
       return it.value ? locale.trueText : locale.falseText;
     }
-    if (column.type === 'select' && column.options) {
+    if ((column.type === 'select' || column.type === 'dropdown' || column.type === 'multiselect') && column.options) {
       const opt = column.options.find((o) => o.value === it.value);
       if (opt) return opt.label;
     }
@@ -282,7 +282,10 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
               </button>
             </>
           )}
-          {column.groupable && onToggleGroup && (
+          {column.groupable !== false &&
+            column.type !== 'sparkline' &&
+            column.type !== 'action' &&
+            onToggleGroup && (
             <button
               type="button"
               onClick={() => {
@@ -421,7 +424,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
               visibleItems.map((it) => {
                 const isChecked = selectedSet.has(it.value);
                 const optMatch =
-                  column.type === 'select'
+                  column.type === 'select' || column.type === 'dropdown' || column.type === 'multiselect'
                     ? column.options?.find((o) => o.value === it.value)
                     : undefined;
                 return (

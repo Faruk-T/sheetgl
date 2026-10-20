@@ -14,7 +14,12 @@ export class GroupingEngine {
       const field = groups[level].selector;
       const buckets = new Map<any, any[]>();
       for (let i = 0; i < items.length; i++) {
-        const val = items[i][field] ?? '(Blank)';
+        const raw = items[i][field];
+        const val = Array.isArray(raw)
+          ? raw.length > 0
+            ? raw.join(', ')
+            : '(Blank)'
+          : raw ?? '(Blank)';
         let b = buckets.get(val);
         if (!b) {
           b = [];
@@ -78,7 +83,12 @@ export class GroupingEngine {
     const buckets = new Map<any, any[]>();
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const val = item[field] ?? '(Blank)';
+      const raw = item[field];
+      const val = Array.isArray(raw)
+        ? raw.length > 0
+          ? raw.join(', ')
+          : '(Blank)'
+        : raw ?? '(Blank)';
       let bucket = buckets.get(val);
       if (!bucket) {
         bucket = [];

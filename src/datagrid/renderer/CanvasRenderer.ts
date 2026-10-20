@@ -122,7 +122,17 @@ export class CanvasRenderer {
         }
 
         if (vRow.type === 'group') {
-          GroupRowPainter.paintGroupRow(ctx, vRow, rowY, width, rowH, theme, locale);
+          GroupRowPainter.paintGroupRow(
+            ctx,
+            vRow,
+            rowY,
+            width,
+            rowH,
+            theme,
+            locale,
+            geometry.columns,
+            hoveredCell?.row === r
+          );
           continue;
         }
 
@@ -278,7 +288,16 @@ export class CanvasRenderer {
       // ========================================================================
       // SELECTION HIGHLIGHT, CORNER FILL HANDLE & RIGHT DUPLICATE HANDLE
       // ========================================================================
-      if (rowCount > 0 && normSel.minRow <= endRow && normSel.maxRow >= startRow) {
+      const activeViewRowForSel = store.getViewRow(normSel.minRow);
+      const isSingleGroupRowSelected =
+        normSel.minRow === normSel.maxRow && activeViewRowForSel?.type === 'group';
+
+      if (
+        !isSingleGroupRowSelected &&
+        rowCount > 0 &&
+        normSel.minRow <= endRow &&
+        normSel.maxRow >= startRow
+      ) {
         const rTopY = headerH + normSel.minRow * rowH - scrollTop;
         const rHeight = (normSel.maxRow - normSel.minRow + 1) * rowH;
 

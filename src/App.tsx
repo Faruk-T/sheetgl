@@ -38,6 +38,79 @@ const STATUS_OPTIONS = [
   },
 ];
 
+const CITY_DROPDOWN_OPTIONS = [
+  { value: 'New York', label: 'New York (US)', fg: '#0284C7', darkFg: '#38BDF8' },
+  { value: 'San Francisco', label: 'San Francisco (US)', fg: '#0284C7', darkFg: '#38BDF8' },
+  { value: 'London', label: 'London (UK)', fg: '#4F46E5', darkFg: '#818CF8' },
+  { value: 'Berlin', label: 'Berlin (DE)', fg: '#D97706', darkFg: '#FBBF24' },
+  { value: 'Tokyo', label: 'Tokyo (JP)', fg: '#E11D48', darkFg: '#FB7185' },
+  { value: 'Singapore', label: 'Singapore (SG)', fg: '#059669', darkFg: '#34D399' },
+  { value: 'Sydney', label: 'Sydney (AU)', fg: '#0D9488', darkFg: '#2DD4BF' },
+  { value: 'Toronto', label: 'Toronto (CA)', fg: '#7C3AED', darkFg: '#A78BFA' },
+  { value: 'Istanbul', label: 'Istanbul (TR)', fg: '#DC2626', darkFg: '#F87171' },
+];
+
+const SECTOR_DROPDOWN_OPTIONS = [
+  { value: 'Enterprise SaaS', label: 'Enterprise SaaS', fg: '#2563EB', darkFg: '#60A5FA' },
+  { value: 'Aerospace', label: 'Aerospace', fg: '#4F46E5', darkFg: '#818CF8' },
+  { value: 'FinTech', label: 'FinTech', fg: '#059669', darkFg: '#34D399' },
+  { value: 'Biotechnology', label: 'Biotechnology', fg: '#D97706', darkFg: '#FBBF24' },
+  { value: 'Logistics', label: 'Logistics', fg: '#0284C7', darkFg: '#38BDF8' },
+  { value: 'Robotics', label: 'Robotics', fg: '#7C3AED', darkFg: '#C084FC' },
+  { value: 'Clean Energy', label: 'Clean Energy', fg: '#16A34A', darkFg: '#4ADE80' },
+];
+
+const COMPLIANCE_MULTI_OPTIONS = [
+  {
+    value: 'SOC2',
+    label: 'SOC2',
+    bg: '#E0E7FF',
+    fg: '#3730A3',
+    darkBg: 'rgba(99, 102, 241, 0.2)',
+    darkFg: '#A5B4FC',
+  },
+  {
+    value: 'GDPR',
+    label: 'GDPR',
+    bg: '#DBEAFE',
+    fg: '#1E40AF',
+    darkBg: 'rgba(59, 130, 246, 0.2)',
+    darkFg: '#93C5FD',
+  },
+  {
+    value: 'ISO27001',
+    label: 'ISO-27001',
+    bg: '#DCFCE7',
+    fg: '#166534',
+    darkBg: 'rgba(34, 197, 94, 0.2)',
+    darkFg: '#86EFAC',
+  },
+  {
+    value: 'HIPAA',
+    label: 'HIPAA',
+    bg: '#FCE7F3',
+    fg: '#9D174D',
+    darkBg: 'rgba(236, 72, 153, 0.2)',
+    darkFg: '#F9A8D4',
+  },
+  {
+    value: 'PCIDSS',
+    label: 'PCI-DSS',
+    bg: '#FEF3C7',
+    fg: '#92400E',
+    darkBg: 'rgba(245, 158, 11, 0.2)',
+    darkFg: '#FCD34D',
+  },
+  {
+    value: 'AISAFE',
+    label: 'AI-Safe',
+    bg: '#F3E8FF',
+    fg: '#6B21A8',
+    darkBg: 'rgba(168, 85, 247, 0.2)',
+    darkFg: '#D8B4FE',
+  },
+];
+
 const REGION_POLICIES: Record<string, { taxRate: number; rating: number }> = {
   'new york': { taxRate: 21, rating: 5 },
   'san francisco': { taxRate: 22, rating: 5 },
@@ -92,6 +165,15 @@ function generateDemoData(count: number = 10000) {
     'Horizon Digital Systems',
     'Vanguard Enterprise FinTech',
   ];
+  const tagCombos = [
+    ['SOC2', 'GDPR'],
+    ['ISO27001', 'SOC2', 'AISAFE'],
+    ['GDPR', 'PCIDSS'],
+    ['HIPAA', 'ISO27001'],
+    ['SOC2', 'PCIDSS', 'GDPR'],
+    ['AISAFE', 'ISO27001'],
+  ];
+  const cutoffTimes = ['08:30', '09:00', '11:30', '14:00', '16:30', '17:45', '18:00'];
 
   const rows: any[] = [];
   for (let i = 1; i <= count; i++) {
@@ -105,6 +187,8 @@ function generateDemoData(count: number = 10000) {
     const progress = (i * 7) % 101;
     const rating = (i % 5) + 1;
     const isApproved = i % 3 === 0;
+    const tags = [...tagCombos[i % tagCombos.length]];
+    const cutoffTime = cutoffTimes[i % cutoffTimes.length];
 
     const sparkline = [
       Math.round(Math.abs(Math.sin(i) * 50) + 10),
@@ -119,6 +203,8 @@ function generateDemoData(count: number = 10000) {
     const yr = 2025;
     const mon = String((i % 12) + 1).padStart(2, '0');
     const day = String((i % 28) + 1).padStart(2, '0');
+    const hh = String(8 + (i % 11)).padStart(2, '0');
+    const mm = String((i * 5) % 60).padStart(2, '0');
 
     rows.push({
       id: i,
@@ -127,6 +213,7 @@ function generateDemoData(count: number = 10000) {
       city,
       category,
       status: status.value,
+      tags,
       balance,
       taxRate,
       netBalance,
@@ -134,6 +221,8 @@ function generateDemoData(count: number = 10000) {
       progress,
       sparkline,
       date: `${yr}-${mon}-${day}`,
+      lastAuditAt: `${yr}-${mon}-${day} ${hh}:${mm}`,
+      cutoffTime,
       isApproved,
     });
   }
@@ -208,12 +297,13 @@ export function App() {
       },
       {
         id: 'city',
-        title: lang === 'tr' ? 'Bölge / Şehir ⚡' : 'Region / City ⚡',
-        type: 'text',
-        width: 135,
+        title: lang === 'tr' ? 'Bölge / Şehir (Dropdown) ⚡' : 'Region / City (Dropdown) ⚡',
+        type: 'dropdown',
+        width: 170,
         sortable: true,
         filterable: true,
         groupable: true,
+        options: CITY_DROPDOWN_OPTIONS,
         // DevExtreme-style Async Backend Cascading Lookup:
         // Changing 'city' fetches tax policy & trust score from backend and updates taxRate, netBalance & rating!
         setCellValue: async (newData, newCity, currentRow) => {
@@ -241,12 +331,13 @@ export function App() {
       },
       {
         id: 'category',
-        title: lang === 'tr' ? 'Sektör ⚡' : 'Industry Sector ⚡',
-        type: 'text',
-        width: 150,
+        title: lang === 'tr' ? 'Sektör (Dropdown) ⚡' : 'Sector (Dropdown) ⚡',
+        type: 'dropdown',
+        width: 165,
         sortable: true,
         filterable: true,
         groupable: true,
+        options: SECTOR_DROPDOWN_OPTIONS,
         // Changing 'category' fetches sector quota & 7-day trend from backend!
         setCellValue: async (newData, newCategory, currentRow) => {
           pushEventLog(
@@ -270,9 +361,9 @@ export function App() {
       },
       {
         id: 'status',
-        title: lang === 'tr' ? 'Durum ⚡' : 'Status ⚡',
+        title: lang === 'tr' ? 'Durum (Select) ⚡' : 'Status (Select) ⚡',
         type: 'select',
-        width: 135,
+        width: 140,
         sortable: true,
         filterable: true,
         groupable: true,
@@ -286,6 +377,16 @@ export function App() {
             newData.progress = 0;
           }
         },
+      },
+      {
+        id: 'tags',
+        title: lang === 'tr' ? 'Uyumluluk (Multi-Choice)' : 'Compliance (Multi-Choice)',
+        type: 'multiselect',
+        width: 210,
+        sortable: true,
+        filterable: true,
+        groupable: true,
+        options: COMPLIANCE_MULTI_OPTIONS,
       },
       {
         id: 'balance',
@@ -355,19 +456,35 @@ export function App() {
         summaryType: 'avg',
       },
       {
+        id: 'date',
+        title: lang === 'tr' ? 'Kayıt Tarihi (Date)' : 'Registered (Date)',
+        type: 'date',
+        width: 140,
+        sortable: true,
+        filterable: true,
+      },
+      {
+        id: 'lastAuditAt',
+        title: lang === 'tr' ? 'Son Denetim (DateTime)' : 'Last Audit (DateTime)',
+        type: 'datetime',
+        width: 175,
+        sortable: true,
+        filterable: true,
+      },
+      {
+        id: 'cutoffTime',
+        title: lang === 'tr' ? 'Kesim Saati (Time)' : 'Cut-off (Time)',
+        type: 'time',
+        width: 130,
+        sortable: true,
+        filterable: true,
+      },
+      {
         id: 'sparkline',
         title: lang === 'tr' ? '7 Günlük Trend' : '7-Day Trend',
         type: 'sparkline',
         width: 135,
         sparklineColor: '#38BDF8',
-      },
-      {
-        id: 'date',
-        title: lang === 'tr' ? 'Kayıt Tarihi' : 'Registered Date',
-        type: 'date',
-        width: 135,
-        sortable: true,
-        filterable: true,
       },
       {
         id: 'actions',
@@ -852,8 +969,14 @@ export function App() {
                 <strong>{selectedRecordModal.city}</strong>
                 <span style={{ color: '#94A3B8' }}>Sector:</span>
                 <strong>{selectedRecordModal.category}</strong>
-                <span style={{ color: '#94A3B8' }}>Status:</span>
+                <span style={{ color: '#94A3B8' }}>Status (Select):</span>
                 <strong>{selectedRecordModal.status}</strong>
+                <span style={{ color: '#94A3B8' }}>Compliance (Multi):</span>
+                <strong>
+                  {Array.isArray(selectedRecordModal.tags)
+                    ? selectedRecordModal.tags.join(', ')
+                    : selectedRecordModal.tags}
+                </strong>
                 <span style={{ color: '#94A3B8' }}>Gross Balance:</span>
                 <strong>${Number(selectedRecordModal.balance).toLocaleString()}</strong>
                 <span style={{ color: '#94A3B8' }}>Tax Rate:</span>
@@ -864,6 +987,10 @@ export function App() {
                 </strong>
                 <span style={{ color: '#94A3B8' }}>Date:</span>
                 <strong>{selectedRecordModal.date}</strong>
+                <span style={{ color: '#94A3B8' }}>Last Audit (DateTime):</span>
+                <strong>{selectedRecordModal.lastAuditAt}</strong>
+                <span style={{ color: '#94A3B8' }}>Cut-off (Time):</span>
+                <strong>{selectedRecordModal.cutoffTime}</strong>
               </div>
             </div>
           </div>

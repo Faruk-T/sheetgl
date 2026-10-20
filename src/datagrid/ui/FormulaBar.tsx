@@ -45,7 +45,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   const isTR = locale?.code?.startsWith('tr');
   const displayVal =
     currentValue != null
-      ? typeof currentValue === 'object'
+      ? Array.isArray(currentValue)
+        ? currentValue.join(', ')
+        : typeof currentValue === 'object'
         ? JSON.stringify(currentValue)
         : String(currentValue)
       : '';
@@ -72,6 +74,11 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
       parsed = isNaN(n) ? 0 : n;
     } else if (column.type === 'boolean') {
       parsed = ['true', '1', 'yes', 'evet', 'doğru'].includes(draft.trim().toLowerCase());
+    } else if (column.type === 'multiselect') {
+      parsed = draft
+        .split(/[,;|]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
     onCommitValue(parsed);
   };

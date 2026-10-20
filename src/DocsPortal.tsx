@@ -620,15 +620,25 @@ export function FinancialGrid() {
       {
         id: 'custom-plugins',
         badge: '07',
-        titleTr: 'Özel Sütun Eklentileri (Custom Column Plugins) & Tarih Editörü',
-        titleEn: 'Custom Column Plugins & Hybrid Calendar Date Editor',
-        descTr: 'IColumnTypePlugin mimarisi, yerleşik takvimli DateEditor ve yeni hücre tipleri geliştirme.',
-        descEn: 'IColumnTypePlugin contract, interactive Calendar DateEditor, and building custom cell renderers.',
+        titleTr: 'Yerleşik 14 Sütun Türü & Özel Sütun Eklentileri (Column Plugins)',
+        titleEn: '14 Built-in Column Types & Custom Column Plugins',
+        descTr: 'text, number, currency, boolean, dropdown, select, multiselect, date, datetime, time, progress, rating, sparkline, action.',
+        descEn: 'text, number, currency, boolean, dropdown, select, multiselect, date, datetime, time, progress, rating, sparkline, action.',
         contentTr: (
           <div>
             <p style={{ lineHeight: 1.7 }}>
-              SheetGL'de her sütun tipi <code>IColumnTypePlugin</code> arayüzünü uygulayan bağımsız bir eklentidir. Yerleşik <code>date</code> sütunu, hem doğrudan <code>YYYY-MM-DD</code> metin girişini hem de hücrenin altında açılan etkileşimli <strong>Takvim (Calendar Picker)</strong> bileşenini içerir ve dışarı tıklanana veya bir gün seçilene kadar kapanmaz.
+              SheetGL'de her sütun tipi <code>IColumnTypePlugin</code> arayüzünü uygulayan bağımsız bir eklentidir. Kutudan çıktığı haliyle <strong>14 zengin sütun türü</strong> hazır gelir:
             </p>
+            <ul style={{ lineHeight: 1.8 }}>
+              <li><code>text</code> / <code>number</code> / <code>currency</code>: Metin, sayı ve para birimi formatlama</li>
+              <li><code>dropdown</code>: Klasik açılır liste (ComboBox) seçici ve arama destekli editör</li>
+              <li><code>select</code>: Renkli durum rozeti (Status Badge) tekli seçim sütunu</li>
+              <li><code>multiselect</code>: Çoklu seçim (Multiple Choice) etiket sütunu; onay kutulu açılır liste ve taşma rozeti (<code>+N</code>)</li>
+              <li><code>date</code>: Etkileşimli aylık takvim açılır menülü tarih sütunu (<code>YYYY-MM-DD</code>)</li>
+              <li><code>datetime</code>: Takvim + Saat/Dakika seçicili tarih ve saat sütunu (<code>YYYY-MM-DD HH:mm</code>)</li>
+              <li><code>time</code>: Hızlı saat dilimi çipleri ve saat/dakika seçicili saat sütunu (<code>HH:mm</code>)</li>
+              <li><code>boolean</code> / <code>rating</code> / <code>progress</code> / <code>sparkline</code> / <code>action</code>: Doğrudan Canvas üzerinde etkileşimli görsel bileşenler</li>
+            </ul>
             <CodeBlock
               id="custom-plugin-code"
               title="Custom Status Pill Plugin"

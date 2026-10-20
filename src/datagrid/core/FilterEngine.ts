@@ -59,13 +59,25 @@ export class FilterEngine {
   }
 
   public static match(rawVal: any, op: FilterOperation, targetVal: any): boolean {
-    const isRawBlank = rawVal === null || rawVal === undefined || rawVal === '';
+    const isRawBlank =
+      rawVal === null ||
+      rawVal === undefined ||
+      rawVal === '' ||
+      (Array.isArray(rawVal) && rawVal.length === 0);
 
     if (op === 'in') {
       if (!Array.isArray(targetVal)) return false;
       if (targetVal.length === 0) return false;
       if (isRawBlank) {
         return targetVal.includes(BLANK_FILTER_TOKEN) || targetVal.includes('') || targetVal.includes(null);
+      }
+      if (Array.isArray(rawVal)) {
+        const joined = rawVal.join(', ').toLowerCase();
+        return targetVal.some(
+          (t) =>
+            String(t).toLowerCase() === joined ||
+            rawVal.some((elem) => elem === t || String(elem).toLowerCase() === String(t).toLowerCase())
+        );
       }
       const valStr = String(rawVal).toLowerCase();
       return targetVal.some((t) => t === rawVal || String(t).toLowerCase() === valStr);
@@ -75,6 +87,14 @@ export class FilterEngine {
       if (!Array.isArray(targetVal)) return true;
       if (isRawBlank) {
         return !(targetVal.includes(BLANK_FILTER_TOKEN) || targetVal.includes('') || targetVal.includes(null));
+      }
+      if (Array.isArray(rawVal)) {
+        const joined = rawVal.join(', ').toLowerCase();
+        return !targetVal.some(
+          (t) =>
+            String(t).toLowerCase() === joined ||
+            rawVal.some((elem) => elem === t || String(elem).toLowerCase() === String(t).toLowerCase())
+        );
       }
       const valStr = String(rawVal).toLowerCase();
       return !targetVal.some((t) => t === rawVal || String(t).toLowerCase() === valStr);
@@ -88,7 +108,7 @@ export class FilterEngine {
       return op === '<>' || op === 'notcontains';
     }
 
-    const valStr = String(rawVal).toLowerCase();
+    const valStr = Array.isArray(rawVal) ? rawVal.join(', ').toLowerCase() : String(rawVal).toLowerCase();
     const targetStr = String(targetVal ?? '').toLowerCase();
 
     switch (op) {

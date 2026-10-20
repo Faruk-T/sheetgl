@@ -122,11 +122,14 @@ export class LocalDataStore implements IDataStore {
 
   public async setGrouping(groupDescriptors: GroupDescriptor[]): Promise<void> {
     this.currentGroups = groupDescriptors;
+    // Start groups collapsed so all group headers & summaries are immediately visible
     this.expandedGroupKeys.clear();
-    // Auto-expand first level groups so user sees grouped rows right away
-    if (groupDescriptors.length > 0) {
-      const firstLevelKeys = GroupingEngine.collectGroupKeys(this.processedData, groupDescriptors, 0);
-      firstLevelKeys.forEach((k) => this.expandedGroupKeys.add(k));
+    for (const g of groupDescriptors) {
+      if (g.isExpanded) {
+        const keys = GroupingEngine.collectGroupKeys(this.processedData, groupDescriptors, 0);
+        keys.forEach((k) => this.expandedGroupKeys.add(k));
+        break;
+      }
     }
     this.recompute();
     return Promise.resolve();
@@ -157,9 +160,25 @@ export class LocalDataStore implements IDataStore {
     this.recomputeVirtualRowsOnly();
   }
 
+  private isValueEqual(a: any, b: any): boolean {
+    if (a === b) return true;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
   private ensureSnapshot(rowKey: any, item: Record<string, any>): void {
     if (!this.originalRowSnapshots.has(rowKey) && !this.insertedKeys.has(rowKey)) {
-      this.originalRowSnapshots.set(rowKey, { ...item });
+      const snap: Record<string, any> = {};
+      for (const [k, v] of Object.entries(item)) {
+        snap[k] = Array.isArray(v) ? [...v] : v;
+      }
+      this.originalRowSnapshots.set(rowKey, snap);
     }
   }
 
@@ -171,7 +190,7 @@ export class LocalDataStore implements IDataStore {
       set = new Set<string>();
       this.dirtyCells.set(rowKey, set);
     }
-    if (orig && orig[columnId] === newValue) {
+    if (orig && this.isValueEqual(orig[columnId], newValue)) {
       set.delete(columnId);
       if (set.size === 0) {
         this.dirtyCells.delete(rowKey);
@@ -184,12 +203,12 @@ export class LocalDataStore implements IDataStore {
   public async setCell(rowKey: any, columnId: string, value: any): Promise<void> {
     const item = this.rawData.find((r) => r[this.keyField] === rowKey);
     if (item) {
-      if (item[columnId] === value) return Promise.resolve();
+      if (this.isValueEqual(item[columnId], value)) return Promise.resolve();
       if (this.batchMode) {
         this.ensureSnapshot(rowKey, item);
         this.markCellDirty(rowKey, columnId, value);
       }
-      item[columnId] = value;
+      item[columnId] = Array.isArray(value) ? [...value] : value;
       this.recompute();
     }
     return Promise.resolve();
@@ -503,8 +522,15 @@ export class LocalDataStore implements IDataStore {
 
     for (let i = 0; i < this.rawData.length; i++) {
       const val = this.rawData[i][columnId];
-      if (val === undefined || val === null || val === '') {
+      if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
         blankCount++;
+      } else if (Array.isArray(val)) {
+        // For multiselect arrays, count each tag element individually so filter checkboxes show individual choices
+        for (const elem of val) {
+          if (elem !== undefined && elem !== null && elem !== '') {
+            counts.set(elem, (counts.get(elem) || 0) + 1);
+          }
+        }
       } else {
         counts.set(val, (counts.get(val) || 0) + 1);
       }

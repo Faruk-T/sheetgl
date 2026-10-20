@@ -1,6 +1,7 @@
 import { VirtualRow } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
+import { ColumnDef } from '../types/grid';
 
 export class GroupRowPainter {
   public static paintGroupRow(
@@ -10,12 +11,18 @@ export class GroupRowPainter {
     width: number,
     height: number,
     theme: IGridThemeTokens,
-    locale: IGridLocale
+    locale: IGridLocale,
+    columns?: ColumnDef[],
+    isHovered?: boolean
   ): void {
     ctx.save();
 
     // 1. Background
-    ctx.fillStyle = theme.canvas.groupRowBg;
+    ctx.fillStyle = isHovered
+      ? theme.isDark
+        ? 'rgba(56, 189, 248, 0.14)'
+        : 'rgba(2, 132, 199, 0.09)'
+      : theme.canvas.groupRowBg;
     ctx.fillRect(0, y, width, height);
 
     // 2. Bottom Border
@@ -28,13 +35,23 @@ export class GroupRowPainter {
 
     // 3. Left Accent Bar by Level
     ctx.fillStyle = theme.dom.accentColor;
-    ctx.fillRect(groupRow.level * 6, y, 3, height);
+    ctx.fillRect(groupRow.level * 6, y, 4, height);
 
-    // 4. Indent & Chevron (▶ / ▼)
-    const indent = 18 + groupRow.level * 20;
+    // 4. Interactive Expand/Collapse Button Box + Chevron (▶ / ▼)
+    const indent = 16 + groupRow.level * 22;
     const midY = y + height / 2;
+    const boxSize = 18;
 
-    ctx.fillStyle = theme.canvas.groupRowText;
+    ctx.fillStyle = groupRow.isExpanded
+      ? theme.dom.accentColor
+      : theme.isDark
+      ? 'rgba(255,255,255,0.1)'
+      : 'rgba(0,0,0,0.07)';
+    ctx.beginPath();
+    ctx.roundRect(indent - boxSize / 2, midY - boxSize / 2, boxSize, boxSize, 4);
+    ctx.fill();
+
+    ctx.fillStyle = groupRow.isExpanded ? '#FFFFFF' : theme.canvas.groupRowText;
     ctx.beginPath();
     if (groupRow.isExpanded) {
       ctx.moveTo(indent - 4, midY - 2);
@@ -48,23 +65,59 @@ export class GroupRowPainter {
     ctx.closePath();
     ctx.fill();
 
-    // 5. Group Title
+    // 5. Resolve human-readable Column Title & Value Label
+    const colDef = columns?.find((c) => c.id === groupRow.field);
+    const colTitle = colDef ? colDef.title.replace(' ⚡', '') : groupRow.field.toUpperCase();
+
+    let displayVal = String(groupRow.value ?? locale.emptyText);
+    if ((colDef?.type === 'select' || colDef?.type === 'dropdown') && colDef.options) {
+      const opt = colDef.options.find((o) => o.value === groupRow.value);
+      if (opt) displayVal = opt.label;
+    } else if (colDef?.type === 'multiselect' && colDef.options) {
+      displayVal = String(groupRow.value ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .map((v) => colDef.options?.find((o) => o.value === v)?.label || v)
+        .join(', ');
+    } else if (colDef?.type === 'boolean') {
+      displayVal = groupRow.value ? locale.trueText : locale.falseText;
+    }
+
+    // 6. Group Header Title + Count Badge
     ctx.fillStyle = theme.canvas.groupRowText;
-    ctx.font = `600 ${theme.fontSize}px ${theme.fontFamily}`;
+    ctx.font = `700 ${theme.fontSize}px ${theme.fontFamily}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    const title = `${groupRow.field.toUpperCase()}: ${groupRow.value} (${locale.groupRecordCount(groupRow.rowCount)})`;
-    ctx.fillText(title, indent + 12, midY);
+    const title = `${colTitle}: ${displayVal}`;
+    ctx.fillText(title, indent + 16, midY);
 
-    // 6. Group Summaries on the right
+    const titleW = ctx.measureText(title).width;
+    const countText = `${locale.groupRecordCount(groupRow.rowCount)}`;
+    ctx.font = `600 ${theme.fontSize - 2}px ${theme.fontFamily}`;
+    const countW = ctx.measureText(countText).width + 12;
+    const badgeX = indent + 24 + titleW;
+
+    ctx.fillStyle = theme.dom.badgeBg;
+    ctx.beginPath();
+    ctx.roundRect(badgeX, midY - 9, countW, 18, 9);
+    ctx.fill();
+
+    ctx.fillStyle = theme.dom.badgeText;
+    ctx.textAlign = 'center';
+    ctx.fillText(countText, badgeX + countW / 2, midY);
+
+    // 7. Group Summaries on the right
     if (groupRow.summaries && Object.keys(groupRow.summaries).length > 0) {
       const summaryText = Object.entries(groupRow.summaries)
         .slice(0, 4)
         .map(([k, v]) => {
+          const sCol = columns?.find((c) => c.id === k);
+          const sTitle = sCol ? sCol.title.replace(' ⚡', '') : k;
           const sType = groupRow.summaryTypes?.[k] || 'sum';
-          return `${k} (${sType.toUpperCase()}): ${Number(v).toLocaleString(locale.code, {
+          const numStr = Number(v).toLocaleString(locale.code, {
             maximumFractionDigits: 2,
-          })}`;
+          });
+          return `${sTitle} (${sType.toUpperCase()}): ${sCol?.currencySymbol || ''}${numStr}`;
         })
         .join('   •   ');
 

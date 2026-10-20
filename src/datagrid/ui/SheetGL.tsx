@@ -768,10 +768,17 @@ export const SheetGL: React.FC<SheetGLProps> = ({
           defaultRow[col.id] = 3;
         } else if (col.type === 'progress') {
           defaultRow[col.id] = 50;
-        } else if (col.type === 'select') {
+        } else if (col.type === 'select' || col.type === 'dropdown') {
           defaultRow[col.id] = col.options?.[0]?.value ?? '';
+        } else if (col.type === 'multiselect') {
+          defaultRow[col.id] = col.options?.slice(0, 2).map((o) => o.value) ?? [];
         } else if (col.type === 'date') {
           defaultRow[col.id] = new Date().toISOString().split('T')[0];
+        } else if (col.type === 'datetime') {
+          const now = new Date();
+          defaultRow[col.id] = `${now.toISOString().split('T')[0]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        } else if (col.type === 'time') {
+          defaultRow[col.id] = '09:30';
         } else if (col.type === 'sparkline') {
           defaultRow[col.id] = [25, 40, 35, 60, 55, 75, 85];
         } else if (col.type === 'text') {
@@ -1121,12 +1128,34 @@ export const SheetGL: React.FC<SheetGLProps> = ({
 
   const handleToggleGroupColumn = (colId: string) => {
     if (permissions.allowGrouping === false) return;
-    const exists = groups.some((g) => g.selector === colId);
-    const nextGroups = exists
-      ? groups.filter((g) => g.selector !== colId)
-      : [...groups, { selector: colId }];
-    setGroups(nextGroups);
-    store.setGrouping(nextGroups);
+    setGroups((prevGroups) => {
+      const exists = prevGroups.some((g) => g.selector === colId);
+      const nextGroups = exists
+        ? prevGroups.filter((g) => g.selector !== colId)
+        : [...prevGroups, { selector: colId }];
+      store.setGrouping(nextGroups);
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+      scrollPosRef.current.top = 0;
+      selectionRef.current.setActiveCell(0, 0);
+      setSelectedCellUI({ row: 0, col: 0 });
+      setStoreVersion((v) => v + 1);
+      requestRender();
+
+      const colTitle = columns.find((c) => c.id === colId)?.title.replace(' ⚡', '') || colId;
+      showToast(
+        exists
+          ? currentLocale.code.startsWith('tr')
+            ? `📂 "${colTitle}" gruplaması kaldırıldı.`
+            : `📂 Ungrouped "${colTitle}".`
+          : currentLocale.code.startsWith('tr')
+          ? `📁 "${colTitle}" sütununa göre gruplandı. Satırları görmek için gruba tıklayın.`
+          : `📁 Grouped by "${colTitle}". Click any group row to expand.`,
+        'info'
+      );
+      return nextGroups;
+    });
   };
 
   const handleApplyColumnFilter = (colId: string, filterState: ColumnFilterState | null) => {
@@ -1509,6 +1538,20 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       requestRender();
     }
 
+    // 2b. Check Group Row Hover (Across entire row width including left chevron)
+    const hoveredRowIdx = Math.floor((y - geom.headerHeight + st) / geom.rowHeight);
+    if (hoveredRowIdx >= 0 && hoveredRowIdx < store.getRowCount()) {
+      const hVRow = store.getViewRow(hoveredRowIdx);
+      if (hVRow && hVRow.type === 'group') {
+        if (hoveredCellRef.current?.row !== hoveredRowIdx || hoveredCellRef.current?.col !== -1) {
+          hoveredCellRef.current = { row: hoveredRowIdx, col: -1 };
+          requestRender();
+        }
+        setCursorStyle('pointer');
+        return;
+      }
+    }
+
     // 3. Check Fill Handle / Right Duplicate Button Hover
     const fhHit = geom.hitTestFillHandle(x, y, sl, st, selectionRef.current);
     if (fhHit) {
@@ -1593,6 +1636,21 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         }
       }
       return;
+    }
+
+    // C2. Group Row Click (Works anywhere across the group row, including the left ▶/▼ chevron!)
+    if (y > geom.headerHeight) {
+      const clickedRowIdx = Math.floor((y - geom.headerHeight + st) / geom.rowHeight);
+      if (clickedRowIdx >= 0 && clickedRowIdx < rowCount) {
+        const clickedVRow = store.getViewRow(clickedRowIdx);
+        if (clickedVRow && clickedVRow.type === 'group') {
+          store.toggleGroup(clickedVRow.groupKey);
+          setStoreVersion((v) => v + 1);
+          requestRender();
+          containerRef.current?.focus();
+          return;
+        }
+      }
     }
 
     // D. Fill Handle or Right-Side Cell Duplicate Handle
@@ -1739,6 +1797,27 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         });
       }
       return;
+    }
+
+    // 1b. Group Row Right-Click
+    if (y > geom.headerHeight) {
+      const clickedRowIdx = Math.floor((y - geom.headerHeight + st) / geom.rowHeight);
+      if (clickedRowIdx >= 0 && clickedRowIdx < rowCount) {
+        const gRow = store.getViewRow(clickedRowIdx);
+        if (gRow && gRow.type === 'group') {
+          const groupCol = geom.columns.find((c) => c.id === gRow.field) || geom.columns[0];
+          setContextMenu({
+            targetType: 'cell',
+            x,
+            y,
+            row: clickedRowIdx,
+            col: 0,
+            column: groupCol,
+            rowData: {},
+          });
+          return;
+        }
+      }
     }
 
     // 2. Row Number Right-Click
@@ -2021,6 +2100,15 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       return;
     }
 
+    // Toggle Group Row with Space or Enter
+    if (vRow && vRow.type === 'group' && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      store.toggleGroup(vRow.groupKey);
+      setStoreVersion((v) => v + 1);
+      requestRender();
+      return;
+    }
+
     // Plugin-specific key handlers (Space toggle for Boolean, 1-5 for Rating, initial char for Text/Number)
     if (colDef && vRow && vRow.type === 'data' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const plugin = ColumnTypeRegistry.get(colDef.type);
@@ -2229,8 +2317,20 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         onExportCsv={exportCsv}
         groups={groups.map((g) => g.selector)}
         onToggleGroupColumn={handleToggleGroupColumn}
-        onExpandAllGroups={() => store.expandAllGroups?.()}
-        onCollapseAllGroups={() => store.collapseAllGroups?.()}
+        onExpandAllGroups={() => {
+          store.expandAllGroups?.();
+          setStoreVersion((v) => v + 1);
+          requestRender();
+        }}
+        onCollapseAllGroups={() => {
+          store.collapseAllGroups?.();
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = 0;
+          }
+          scrollPosRef.current.top = 0;
+          setStoreVersion((v) => v + 1);
+          requestRender();
+        }}
         availableColumns={columns}
         onUpdateColumn={handleUpdateColumnDef}
         summaryTypes={store.getSummaryTypes?.()}
