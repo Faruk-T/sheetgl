@@ -157,23 +157,48 @@ export function SheetGLGrid() {
 export default SheetGLGrid;
 `;
 
-function handleInit(targetRelPath) {
+function handleInit(rawArgs) {
   printBanner();
-  const outPath = path.resolve(process.cwd(), targetRelPath || 'src/components/SheetGLGrid.tsx');
+  let dirOpt = null;
+  let nameOpt = null;
+  let rowsOpt = 1000;
+  let positionalPath = null;
+
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i];
+    if (arg === '--dir' || arg === '-d') {
+      dirOpt = rawArgs[++i];
+    } else if (arg === '--name' || arg === '-n') {
+      nameOpt = rawArgs[++i];
+    } else if (arg === '--rows' || arg === '-r') {
+      const parsed = parseInt(rawArgs[++i], 10);
+      if (!Number.isNaN(parsed) && parsed > 0) rowsOpt = parsed;
+    } else if (!arg.startsWith('-') && !positionalPath) {
+      positionalPath = arg;
+    }
+  }
+
+  const componentName = (nameOpt || 'SheetGLGrid').replace(/\.(tsx|ts|jsx|js)$/i, '');
+  const defaultRelPath = path.join(dirOpt || 'src/components', `${componentName}.tsx`);
+  const outPath = path.resolve(process.cwd(), positionalPath || defaultRelPath);
   const outDir = path.dirname(outPath);
 
   if (!fs.existsSync(outDir)) {
     fs.mkdirSync(outDir, { recursive: true });
   }
 
-  fs.writeFileSync(outPath, STARTER_COMPONENT_TEMPLATE, 'utf8');
+  const customizedTemplate = STARTER_COMPONENT_TEMPLATE
+    .replace(/SheetGLGrid/g, componentName)
+    .replace('length: 1000', `length: ${rowsOpt}`);
+
+  fs.writeFileSync(outPath, customizedTemplate, 'utf8');
   console.log(`${GREEN}✔ Created SheetGL starter component at:${RESET} ${BOLD}${outPath}${RESET}`);
   console.log(`
 ${BOLD}Next steps:${RESET}
   1. Ensure ${CYAN}sheetgl${RESET} is installed in your project:
      ${YELLOW}npm install sheetgl${RESET}
-  2. Import and render ${CYAN}<SheetGLGrid />${RESET} in your ${BOLD}App.tsx${RESET}:
-     ${DIM}import { SheetGLGrid } from './components/SheetGLGrid';${RESET}
+  2. Import and render ${CYAN}<${componentName} />${RESET} in your ${BOLD}App.tsx${RESET}:
+     ${DIM}import { ${componentName} } from './components/${componentName}';${RESET}
 `);
 }
 
@@ -331,7 +356,7 @@ const args = process.argv.slice(2);
 const cmd = (args[0] || 'help').toLowerCase();
 
 if (cmd === 'init' || cmd === 'setup') {
-  handleInit(args[1]);
+  handleInit(args.slice(1));
 } else if (cmd === 'create') {
   handleCreate(args[1]);
 } else if (cmd === 'doctor' || cmd === 'info' || cmd === 'check') {
