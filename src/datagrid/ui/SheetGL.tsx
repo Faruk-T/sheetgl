@@ -3,6 +3,8 @@ import {
   ColumnDef,
   ActiveOverlayState,
   GridPermissions,
+  GridToolbarConfig,
+  GridSummaryConfig,
   EditingStartEvent,
   CellValueChangingEvent,
   CellValueChangedEvent,
@@ -32,6 +34,7 @@ import { SparklineModalOverlay, SparklineModalState } from '../overlays/Sparklin
 import { ToolBar } from './ToolBar';
 import { FormulaBar } from './FormulaBar';
 import { SummaryFooter, SelectionSummaryStats } from './SummaryFooter';
+import { MaterialIcon } from './MaterialIcon';
 import { LocalDataStore } from '../data/LocalDataStore';
 import { initDefaultColumnPlugins } from '../columns/initPlugins';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
@@ -48,6 +51,18 @@ export interface SheetGLProps {
   initialGroups?: GroupDescriptor[];
   permissions?: GridPermissions;
   batchEditMode?: boolean;
+  /**
+   * Toolbar visibility & configuration (`buttonDisplayMode: 'icon' | 'icon-text' | 'text'`, item visibility, customItems)
+   */
+  toolbar?: boolean | GridToolbarConfig;
+  onToolbarConfigChange?: (config: GridToolbarConfig) => void;
+  /**
+   * Summary Row (bottom footer) visibility & configuration (`showTotalCount`, `showSelectionStats`, `showColumnSummaries`, `items`, `columnSummaryTypes`)
+   */
+  summaryRow?: boolean | GridSummaryConfig;
+  onSummaryConfigChange?: (config: GridSummaryConfig) => void;
+  /** Whether to show the Excel Formula & Coordinate Bar below the toolbar (default: true) */
+  showFormulaBar?: boolean;
   onPermissionsChange?: (permissions: GridPermissions) => void;
   onCellChange?: (row: any, columnId: string, value: any) => void;
 
@@ -109,6 +124,11 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   initialGroups = [],
   permissions: userPermissions,
   batchEditMode = true,
+  toolbar: userToolbar,
+  onToolbarConfigChange,
+  summaryRow: userSummaryRow,
+  onSummaryConfigChange,
+  showFormulaBar = true,
   onPermissionsChange,
   onCellChange,
   onEditingStart,
@@ -139,6 +159,16 @@ export const SheetGL: React.FC<SheetGLProps> = ({
           initialSummaries[c.id] = c.summaryType;
         }
       });
+      if (userSummaryRow && typeof userSummaryRow === 'object') {
+        if (userSummaryRow.columnSummaryTypes) {
+          Object.assign(initialSummaries, userSummaryRow.columnSummaryTypes);
+        }
+        if (Array.isArray(userSummaryRow.items)) {
+          userSummaryRow.items.forEach((item) => {
+            initialSummaries[item.columnId] = item.summaryType;
+          });
+        }
+      }
       return new LocalDataStore({
         data: dataSource,
         keyField: 'id',
@@ -211,6 +241,96 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     setPermissions(next);
     onPermissionsChange?.(next);
   };
+
+  // 3d. Toolbar & Summary Row Configuration State
+  const [toolbarConfig, setToolbarConfig] = useState<GridToolbarConfig>(() => {
+    if (userToolbar === false) return { visible: false, buttonDisplayMode: 'icon-text' };
+    if (userToolbar && typeof userToolbar === 'object') {
+      return { visible: true, buttonDisplayMode: 'icon-text', ...userToolbar };
+    }
+    return { visible: true, buttonDisplayMode: 'icon-text' };
+  });
+
+  useEffect(() => {
+    if (userToolbar === false) {
+      setToolbarConfig((prev) => ({ ...prev, visible: false }));
+    } else if (userToolbar === true) {
+      setToolbarConfig((prev) => ({ ...prev, visible: true }));
+    } else if (userToolbar && typeof userToolbar === 'object') {
+      setToolbarConfig((prev) => ({
+        ...prev,
+        visible: userToolbar.visible !== false,
+        ...userToolbar,
+      }));
+    }
+  }, [userToolbar]);
+
+  const handleUpdateToolbarConfig = useCallback(
+    (patch: Partial<GridToolbarConfig>) => {
+      setToolbarConfig((prev) => {
+        const next = { ...prev, ...patch };
+        onToolbarConfigChange?.(next);
+        return next;
+      });
+    },
+    [onToolbarConfigChange]
+  );
+
+  const [summaryConfig, setSummaryConfig] = useState<GridSummaryConfig>(() => {
+    if (userSummaryRow === false) return { visible: false };
+    if (userSummaryRow && typeof userSummaryRow === 'object') {
+      return {
+        visible: true,
+        showTotalCount: true,
+        showSelectionStats: true,
+        showColumnSummaries: true,
+        allowConfiguration: true,
+        ...userSummaryRow,
+      };
+    }
+    return {
+      visible: true,
+      showTotalCount: true,
+      showSelectionStats: true,
+      showColumnSummaries: true,
+      allowConfiguration: true,
+    };
+  });
+
+  useEffect(() => {
+    if (userSummaryRow === false) {
+      setSummaryConfig((prev) => ({ ...prev, visible: false }));
+    } else if (userSummaryRow === true) {
+      setSummaryConfig((prev) => ({ ...prev, visible: true }));
+    } else if (userSummaryRow && typeof userSummaryRow === 'object') {
+      setSummaryConfig((prev) => ({
+        ...prev,
+        visible: userSummaryRow.visible !== false,
+        ...userSummaryRow,
+      }));
+      if (userSummaryRow.columnSummaryTypes) {
+        Object.entries(userSummaryRow.columnSummaryTypes).forEach(([colId, sType]) => {
+          store.setSummaryType?.(colId, sType);
+        });
+      }
+      if (Array.isArray(userSummaryRow.items)) {
+        userSummaryRow.items.forEach((item) => {
+          store.setSummaryType?.(item.columnId, item.summaryType);
+        });
+      }
+    }
+  }, [userSummaryRow, store]);
+
+  const handleUpdateSummaryConfig = useCallback(
+    (patch: Partial<GridSummaryConfig>) => {
+      setSummaryConfig((prev) => {
+        const next = { ...prev, ...patch };
+        onSummaryConfigChange?.(next);
+        return next;
+      });
+    },
+    [onSummaryConfigChange]
+  );
 
   // 4. Core Engines
   const [columns, setColumns] = useState<ColumnDef[]>(userColumns);
@@ -2436,15 +2556,14 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         color: resolvedTheme.canvas.cellText,
         fontFamily: resolvedTheme.fontFamily,
         boxSizing: 'border-box',
-        overflow: 'hidden',
+        overflow: activeOverlay || headerFilterState || contextMenu ? 'visible' : 'hidden',
         position: 'relative',
+        zIndex: activeOverlay || headerFilterState || contextMenu ? 60 : undefined,
         ...style,
       }}
     >
       {/* 1. TOP TOOLBAR */}
       <ToolBar
-        rowCount={store.getRowCount()}
-        columnCount={geometryRef.current.columns.length}
         theme={resolvedTheme}
         locale={currentLocale}
         currentThemeName={typeof currentThemeName === 'string' ? currentThemeName : 'custom'}
@@ -2498,43 +2617,54 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         onDiscardBatch={handleDiscardBatch}
         activeFilterCount={Object.keys(columnFilters).length}
         onClearAllFilters={handleClearAllFilters}
+        toolbarConfig={toolbarConfig}
+        onUpdateToolbarConfig={handleUpdateToolbarConfig}
+        summaryConfig={summaryConfig}
+        onUpdateSummaryConfig={handleUpdateSummaryConfig}
       />
 
       {/* 2. FORMULA & COORDINATE BAR */}
-      <FormulaBar
-        activeCoords={selectedCellUI}
-        selectionSpan={selectionSpan}
-        column={currentColumn}
-        currentValue={currentCellValue}
-        isEditable={isActiveCellEditable}
-        canDuplicate={
-          permissions.mode !== 'read' &&
-          permissions.mode !== 'readonly' &&
-          permissions.allowDuplicating !== false
-        }
-        onCommitValue={(newVal) => {
-          if (currentColumn) {
-            commitSingleCellEdit(selectedCellUI.row, currentColumn, newVal, true);
+      {showFormulaBar && (
+        <FormulaBar
+          activeCoords={selectedCellUI}
+          selectionSpan={selectionSpan}
+          column={currentColumn}
+          currentValue={currentCellValue}
+          isEditable={isActiveCellEditable}
+          buttonDisplayMode={toolbarConfig.buttonDisplayMode || 'icon-text'}
+          canDuplicate={
+            permissions.mode !== 'read' &&
+            permissions.mode !== 'readonly' &&
+            permissions.allowDuplicating !== false
           }
-        }}
-        onDuplicateDown={handleDuplicateCellDown}
-        onDuplicateRight={handleDuplicateCellRight}
-        onDuplicateRow={() => handleDuplicateRow(selectedCellUI.row)}
-        onOpenSparklineModal={() => {
-          if (currentColumn?.type === 'sparkline' && activeViewRow && activeViewRow.type === 'data') {
-            setSparklineModal({
-              rowIndex: selectedCellUI.row,
-              rowData: activeViewRow.data,
-              column: currentColumn,
-              points: Array.isArray(activeViewRow.data[currentColumn.id])
-                ? activeViewRow.data[currentColumn.id]
-                : [],
-            });
-          }
-        }}
-        theme={resolvedTheme}
-        locale={currentLocale}
-      />
+          onCommitValue={(newVal) => {
+            if (currentColumn) {
+              commitSingleCellEdit(selectedCellUI.row, currentColumn, newVal, true);
+            }
+          }}
+          onDuplicateDown={handleDuplicateCellDown}
+          onDuplicateRight={handleDuplicateCellRight}
+          onDuplicateRow={() => handleDuplicateRow(selectedCellUI.row)}
+          onOpenSparklineModal={() => {
+            if (
+              currentColumn?.type === 'sparkline' &&
+              activeViewRow &&
+              activeViewRow.type === 'data'
+            ) {
+              setSparklineModal({
+                rowIndex: selectedCellUI.row,
+                rowData: activeViewRow.data,
+                column: currentColumn,
+                points: Array.isArray(activeViewRow.data[currentColumn.id])
+                  ? activeViewRow.data[currentColumn.id]
+                  : [],
+              });
+            }
+          }}
+          theme={resolvedTheme}
+          locale={currentLocale}
+        />
+      )}
 
       {/* 3. MAIN GRID SURFACE (CANVAS + VIRTUAL SCROLLBAR + MICRO-DOM OVERLAYS) */}
       <div
@@ -2546,7 +2676,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         style={{
           position: 'relative',
           flex: 1,
-          overflow: 'hidden',
+          overflow: activeOverlay || headerFilterState || contextMenu ? 'visible' : 'hidden',
           cursor: resizingCol ? 'col-resize' : cursorStyle,
         }}
       >
@@ -2676,11 +2806,12 @@ export const SheetGL: React.FC<SheetGLProps> = ({
                 color: resolvedTheme.dom.popoverText,
                 boxShadow: resolvedTheme.dom.popoverShadow,
                 cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              ⤒
+              <MaterialIcon name="vertical_align_top" size={16} />
             </button>
             <button
               type="button"
@@ -2702,11 +2833,12 @@ export const SheetGL: React.FC<SheetGLProps> = ({
                 color: resolvedTheme.dom.popoverText,
                 boxShadow: resolvedTheme.dom.popoverShadow,
                 cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              ⤓
+              <MaterialIcon name="vertical_align_bottom" size={16} />
             </button>
           </div>
         )}
@@ -2951,6 +3083,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         summaries={store.getSummaries()}
         summaryTypes={store.getSummaryTypes?.()}
         onChangeSummaryType={handleChangeSummaryType}
+        summaryConfig={summaryConfig}
+        onUpdateSummaryConfig={handleUpdateSummaryConfig}
         selectionStats={selectionStats}
         columns={columns}
         theme={resolvedTheme}

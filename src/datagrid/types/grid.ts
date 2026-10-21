@@ -311,3 +311,101 @@ export interface ActiveOverlayState {
   initialValue: any;
   initialChar?: string;
 }
+
+/**
+ * Toolbar button display mode:
+ * - 'icon': Only Google Material Symbols icon
+ * - 'icon-text': Google Material Symbols icon + text label
+ * - 'text': Only text label
+ */
+export type ToolbarButtonDisplayMode = 'icon' | 'icon-text' | 'text';
+
+export interface GridToolbarCustomItem {
+  id: string;
+  label: string;
+  /** Google Material Symbols icon name (from https://fonts.google.com/icons), e.g. 'refresh', 'print', 'upload_file' */
+  icon?: string;
+  tooltip?: string;
+  position?: 'left' | 'right';
+  /** Overrides the toolbar-level buttonDisplayMode for this item */
+  displayMode?: ToolbarButtonDisplayMode;
+  disabled?: boolean;
+  active?: boolean;
+  variant?: 'default' | 'primary' | 'danger' | 'success';
+  onClick: () => void;
+}
+
+export interface GridToolbarConfig {
+  /** Whether the toolbar is visible (default: true) */
+  visible?: boolean;
+  /**
+   * Controls how action buttons are rendered across the toolbar:
+   * - 'icon': Only Google Material Symbols icon
+   * - 'icon-text': Google Material Symbols icon + text label (default)
+   * - 'text': Only text label
+   */
+  buttonDisplayMode?: ToolbarButtonDisplayMode;
+  /** Allow switching buttonDisplayMode ('icon' | 'icon-text' | 'text') interactively in the toolbar UI (default: true) */
+  allowDisplayModeSwitch?: boolean;
+  /** Show SheetGL brand badge on the left (default: true) */
+  showBrand?: boolean;
+  /** Show Add Row button (default: true) */
+  showAddRow?: boolean;
+  /** Show Duplicate Row button (default: true) */
+  showDuplicateRow?: boolean;
+  /** Show Delete Row button (default: true) */
+  showDeleteRow?: boolean;
+  /** Show Undo / Redo buttons (default: true) */
+  showUndoRedo?: boolean;
+  /** Show global search input (default: true) */
+  showSearch?: boolean;
+  /** Show Group By selector (default: true) */
+  showGroupBy?: boolean;
+  /** Show Clear Active Filters button when filters exist (default: true) */
+  showClearFilters?: boolean;
+  /** Show Batch Save / Discard controls when there are unsaved changes (default: true) */
+  showBatchActions?: boolean;
+  /** Show Permission Mode switcher (default: true) */
+  showPermissionsSwitch?: boolean;
+  /** Show Column Settings & Summary configuration popover button (default: true) */
+  showColumnSettings?: boolean;
+  /** Show Locale (EN / TR) switcher (default: true) */
+  showLocaleSwitch?: boolean;
+  /** Show Theme preset switcher (default: true) */
+  showThemeSwitch?: boolean;
+  /** Show Export CSV button (default: true) */
+  showExportCsv?: boolean;
+  /** Custom toolbar action items with Google Material Symbols icon support */
+  customItems?: GridToolbarCustomItem[];
+}
+
+export type SelectionStatMetric = 'cells' | 'count' | 'numeric' | 'sum' | 'avg' | 'min' | 'max';
+
+export interface GridSummaryItemConfig {
+  columnId: string;
+  summaryType: SummaryType;
+  label?: string;
+  prefix?: string;
+  suffix?: string;
+  decimalDigits?: number;
+}
+
+export interface GridSummaryConfig {
+  /** Whether the bottom Summary Row / Footer is visible (default: true) */
+  visible?: boolean;
+  /** Show total row count badge on the left (default: true) */
+  showTotalCount?: boolean;
+  /** Show live Excel range selection statistics in the center (default: true) */
+  showSelectionStats?: boolean;
+  /** Which selection metrics to display when multiple cells are selected */
+  selectionMetrics?: SelectionStatMetric[];
+  /** Show column aggregation summary pills on the right (default: true) */
+  showColumnSummaries?: boolean;
+  /** Allow user to interactively add/remove/change column summary aggregations in the UI (default: true) */
+  allowConfiguration?: boolean;
+  /** Map of columnId -> SummaryType ('sum' | 'avg' | 'min' | 'max' | 'count' | 'none') */
+  columnSummaryTypes?: Record<string, SummaryType>;
+  /** Declarative list of summary items (DevExtreme-style totalItems) */
+  items?: GridSummaryItemConfig[];
+}
+

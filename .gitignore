@@ -50,3 +50,4 @@ node_modules/.tmp
 # Scratch & Temporary files
 temp-*
 *.tmp
+*.tgz

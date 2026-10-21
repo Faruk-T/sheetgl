@@ -2,6 +2,8 @@ export { SheetGL } from './ui/SheetGL';
 export type { SheetGLProps } from './ui/SheetGL';
 export { SheetGLLogo } from './ui/SheetGLLogo';
 export type { SheetGLLogoProps } from './ui/SheetGLLogo';
+export { MaterialIcon, ensureMaterialSymbolsLoaded } from './ui/MaterialIcon';
+export type { MaterialIconProps } from './ui/MaterialIcon';
 
 export { LocalDataStore } from './data/LocalDataStore';
 export { RemoteDataStore } from './data/RemoteDataStore';
@@ -25,6 +27,12 @@ export type {
   ColumnType,
   ColumnPermission,
   GridPermissions,
+  ToolbarButtonDisplayMode,
+  GridToolbarCustomItem,
+  GridToolbarConfig,
+  SelectionStatMetric,
+  GridSummaryItemConfig,
+  GridSummaryConfig,
   SelectOption,
   ValidationRule,
   ValidationCallbackParams,

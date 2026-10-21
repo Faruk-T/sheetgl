@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { IGridThemeTokens } from '../theme/IGridTheme';
-import { ColumnDef } from '../types/grid';
+import { ColumnDef, ToolbarButtonDisplayMode } from '../types/grid';
 import { IGridLocale } from '../i18n/IGridLocale';
+import { MaterialIcon } from './MaterialIcon';
 
 export interface FormulaBarProps {
   activeCoords: { row: number; col: number };
@@ -10,6 +11,7 @@ export interface FormulaBarProps {
   currentValue: any;
   isEditable?: boolean;
   canDuplicate?: boolean;
+  buttonDisplayMode?: ToolbarButtonDisplayMode;
   onCommitValue?: (newValue: any) => void;
   onDuplicateDown?: () => void;
   onDuplicateRight?: () => void;
@@ -36,6 +38,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   currentValue,
   isEditable = true,
   canDuplicate = true,
+  buttonDisplayMode = 'icon-text',
   onCommitValue,
   onDuplicateDown,
   onDuplicateRight,
@@ -48,8 +51,8 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   const isSparkline = column?.type === 'sparkline';
   const displayVal = isSparkline
     ? isTR
-      ? '📈 [7 Günlük Trend Grafiği — Detaylı grafik görünümü için hücreye tıklayın]'
-      : '📈 [7-Day Trend Chart — Click cell to open detailed chart dialog]'
+      ? '[7 Günlük Trend Grafiği — Detaylı grafik görünümü için hücreye tıklayın]'
+      : '[7-Day Trend Chart — Click cell to open detailed chart dialog]'
     : currentValue != null
     ? Array.isArray(currentValue)
       ? currentValue.join(', ')
@@ -98,7 +101,6 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           parsed = obj;
         }
       } catch {
-        // Fallback key:value parser
         const out: Record<string, any> = {};
         for (const pair of draft.split(/[,;|]/)) {
           const idx = pair.indexOf(':');
@@ -113,6 +115,15 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     }
     onCommitValue(parsed);
   };
+
+  const renderBtnContent = (iconName: string, label: string, iconColor?: string) => (
+    <>
+      {(buttonDisplayMode === 'icon' || buttonDisplayMode === 'icon-text') && (
+        <MaterialIcon name={iconName} size={13} color={iconColor} />
+      )}
+      {(buttonDisplayMode === 'icon-text' || buttonDisplayMode === 'text') && <span>{label}</span>}
+    </>
+  );
 
   return (
     <div
@@ -167,8 +178,13 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           </span>
           <span
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
               padding: '2px 6px',
-              backgroundColor: isEditable ? 'rgba(48, 209, 88, 0.14)' : 'rgba(255, 159, 10, 0.16)',
+              backgroundColor: isEditable
+                ? 'rgba(48, 209, 88, 0.14)'
+                : 'rgba(255, 159, 10, 0.16)',
               color: isEditable ? '#30D158' : '#FF9F0A',
               borderRadius: 4,
               fontSize: 10,
@@ -176,15 +192,23 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
               fontWeight: 700,
             }}
           >
-            {isEditable ? 'WRITE' : '🔒 READONLY'}
+            <MaterialIcon
+              name={isEditable ? 'edit' : 'lock'}
+              size={11}
+              color={isEditable ? '#30D158' : '#FF9F0A'}
+            />
+            <span>{isEditable ? 'WRITE' : 'READONLY'}</span>
           </span>
         </div>
       )}
 
       {/* fx Symbol */}
-      <span style={{ fontWeight: 700, color: theme.isDark ? '#8E8E93' : '#AEAEB2', fontStyle: 'italic' }}>
-        fx
-      </span>
+      <MaterialIcon
+        name="functions"
+        size={15}
+        color={theme.isDark ? '#8E8E93' : '#AEAEB2'}
+        title="Formula / Value Bar"
+      />
 
       {/* Interactive Formula / Value Input */}
       <input
@@ -209,7 +233,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
             (e.target as HTMLInputElement).blur();
           }
         }}
-        placeholder={isEditable ? (locale?.formulaBarPlaceholder || 'Enter value...') : 'Read-only cell'}
+        placeholder={
+          isEditable ? locale?.formulaBarPlaceholder || 'Enter value...' : 'Read-only cell'
+        }
         style={{
           flex: 1,
           padding: '3px 8px',
@@ -230,6 +256,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
             type="button"
             onClick={onOpenSparklineModal}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
               padding: '2px 10px',
               fontSize: 11,
               borderRadius: 4,
@@ -240,7 +269,11 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
               fontWeight: 700,
             }}
           >
-            📈 {isTR ? 'Detaylı Trend Grafiğini Aç' : 'Open Detailed Chart'}
+            {renderBtnContent(
+              'show_chart',
+              isTR ? 'Detaylı Trend Grafiğini Aç' : 'Open Detailed Chart',
+              '#FFFFFF'
+            )}
           </button>
         ) : (
           <>
@@ -251,6 +284,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
                 onClick={onDuplicateDown}
                 title={isTR ? 'Hücreyi Aşağı Çoğalt (Ctrl+D)' : 'Duplicate Cell Down (Ctrl+D)'}
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
                   padding: '2px 7px',
                   fontSize: 11,
                   borderRadius: 4,
@@ -262,7 +298,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
                   fontWeight: 600,
                 }}
               >
-                ⬇ {isTR ? 'Aşağı Çoğalt' : 'Fill Down'}
+                {renderBtnContent('south', isTR ? 'Aşağı Çoğalt' : 'Fill Down')}
               </button>
             )}
             {onDuplicateRight && (
@@ -272,6 +308,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
                 onClick={onDuplicateRight}
                 title={isTR ? 'Hücreyi Sağa Çoğalt (Ctrl+R)' : 'Duplicate Cell Right (Ctrl+R)'}
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
                   padding: '2px 7px',
                   fontSize: 11,
                   borderRadius: 4,
@@ -283,7 +322,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
                   fontWeight: 600,
                 }}
               >
-                ➡ {isTR ? 'Sağa Çoğalt' : 'Fill Right'}
+                {renderBtnContent('east', isTR ? 'Sağa Çoğalt' : 'Fill Right')}
               </button>
             )}
           </>
@@ -295,6 +334,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
             onClick={onDuplicateRow}
             title={isTR ? 'Satırı Çoğalt (Duplicate Row)' : 'Duplicate Entire Row'}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
               padding: '2px 7px',
               fontSize: 11,
               borderRadius: 4,
@@ -306,7 +348,11 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
               fontWeight: 600,
             }}
           >
-            ⧉ {isTR ? 'Satır Çoğalt' : 'Dup Row'}
+            {renderBtnContent(
+              'content_copy',
+              isTR ? 'Satır Çoğalt' : 'Dup Row',
+              theme.dom.accentColor
+            )}
           </button>
         )}
       </div>
