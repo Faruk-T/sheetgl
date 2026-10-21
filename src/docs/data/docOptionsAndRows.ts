@@ -1,0 +1,102 @@
+import { SelectOption } from '../../datagrid/types/grid';
+
+export const DOC_STATUS_OPTIONS: SelectOption[] = [
+  { value: 'active', label: 'Active', color: '#10B981', bgColor: 'rgba(16, 185, 129, 0.16)' },
+  { value: 'pending', label: 'Pending', color: '#F59E0B', bgColor: 'rgba(245, 158, 11, 0.16)' },
+  { value: 'rejected', label: 'Rejected', color: '#EF4444', bgColor: 'rgba(239, 68, 68, 0.16)' },
+];
+
+export const DOC_CITY_OPTIONS: SelectOption[] = [
+  { value: 'Istanbul', label: 'Istanbul', icon: '🌉', subtitle: 'EMEA Hub • 20% Tax' },
+  { value: 'London', label: 'London', icon: '🇬🇧', subtitle: 'Europe • 15% Tax' },
+  { value: 'New York', label: 'New York', icon: '🗽', subtitle: 'Americas • 10% Tax' },
+  { value: 'Tokyo', label: 'Tokyo', icon: '🗼', subtitle: 'APAC • 12% Tax' },
+];
+
+export const DOC_TAGS_OPTIONS: SelectOption[] = [
+  { value: 'SOC2', label: 'SOC2 Type II', color: '#38BDF8', bgColor: 'rgba(56, 189, 248, 0.16)' },
+  { value: 'GDPR', label: 'EU GDPR', color: '#A855F7', bgColor: 'rgba(168, 85, 247, 0.16)' },
+  { value: 'ISO27001', label: 'ISO 27001', color: '#10B981', bgColor: 'rgba(16, 185, 129, 0.16)' },
+  { value: 'HIPAA', label: 'HIPAA', color: '#F59E0B', bgColor: 'rgba(245, 158, 11, 0.16)' },
+];
+
+export const DOC_LOOKUP_OPTIONS: SelectOption[] = [
+  { value: 'MGR-01', label: 'Elena Rostova', subtitle: 'VP of Enterprise Sales • EMEA', color: '#38BDF8' },
+  { value: 'MGR-02', label: 'Marcus Vance', subtitle: 'Managing Director • Americas', color: '#8B5CF6' },
+  { value: 'MGR-03', label: 'Kenji Takahashi', subtitle: 'Head of FinTech • APAC', color: '#10B981' },
+];
+
+export const ALL_COLUMNS_DEMO_DATA: Record<string, any>[] = [
+  {
+    id: 1,
+    code: 'ACC-100001',
+    company: 'Acme Global Holding',
+    managerId: 'MGR-01',
+    metadata: { tier: 'Enterprise', sla: '99.99%', costCenter: 'CC-201' },
+    city: 'Istanbul',
+    status: 'active',
+    tags: ['SOC2', 'GDPR'],
+    quantity: 250,
+    balance: 65420.5,
+    yoyGrowth: 18.4,
+    progress: 85,
+    isApproved: true,
+    rating: 5,
+    date: '2025-05-14',
+    lastAuditAt: '2025-05-14 14:30',
+    cutoffTime: '09:30',
+    email: 'finance@acmeglobal.io',
+    website: 'https://acmeglobal.io',
+    phone: '+1 (415) 390-2100',
+    tagColor: '#38BDF8',
+    sparkline: [25, 40, 35, 60, 55, 75, 90],
+  },
+  {
+    id: 2,
+    code: 'ACC-100002',
+    company: 'Nexus Cloud Tech',
+    managerId: 'MGR-02',
+    metadata: { tier: 'Strategic', sla: '99.95%', costCenter: 'CC-202' },
+    city: 'London',
+    status: 'pending',
+    tags: ['ISO27001', 'SOC2', 'HIPAA'],
+    quantity: 1420,
+    balance: 128900.0,
+    yoyGrowth: -6.2,
+    progress: 62,
+    isApproved: false,
+    rating: 4,
+    date: '2025-06-22',
+    lastAuditAt: '2025-06-22 09:15',
+    cutoffTime: '14:00',
+    email: 'billing@nexuscloud.io',
+    website: 'https://nexuscloud.io',
+    phone: '+44 20 7946 0921',
+    tagColor: '#10B981',
+    sparkline: [80, 70, 65, 50, 58, 45, 40],
+  },
+  {
+    id: 3,
+    code: 'ACC-100003',
+    company: 'Vertex BioPharma',
+    managerId: 'MGR-03',
+    metadata: { tier: 'Growth', sla: '99.90%', costCenter: 'CC-203' },
+    city: 'New York',
+    status: 'rejected',
+    tags: ['GDPR'],
+    quantity: 85,
+    balance: 42150.75,
+    yoyGrowth: 24.9,
+    progress: 94,
+    isApproved: true,
+    rating: 3,
+    date: '2025-08-09',
+    lastAuditAt: '2025-08-09 17:45',
+    cutoffTime: '17:45',
+    email: 'ops@vertexlabs.io',
+    website: 'https://vertexlabs.io',
+    phone: '+90 (212) 555-0199',
+    tagColor: '#8B5CF6',
+    sparkline: [15, 30, 45, 52, 68, 82, 95],
+  },
+];

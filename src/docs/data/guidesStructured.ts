@@ -1,0 +1,152 @@
+import { ColumnGuideItem } from '../types';
+
+export const STRUCTURED_GUIDES: ColumnGuideItem[] = [
+  {
+    type: 'object',
+    colId: 'metadata',
+    category: 'structured',
+    categoryLabelTr: 'Yapısal & Tarih/Saat',
+    categoryLabelEn: 'Structured & Date/Time',
+    titleTr: 'Nesne & JSON Sütunu (Object)',
+    titleEn: 'Structured Object / JSON Column (object)',
+    dataType: 'Record<string, any>',
+    sampleValue: '{ tier: "Enterprise", sla: "99.99%", costCenter: "CC-204" }',
+    summaryTr:
+      'Hücre içinde iç içe JavaScript nesnesi (Object / JSON) tutmak için kullanılır. Hücrede "{ } tier: Enterprise • +2" şeklinde özet rozet ve anahtar-değer çiftlerini gösterir.',
+    summaryEn:
+      'Natively binds nested JavaScript objects or JSON payloads. Renders a "{ }" badge, primary key-value pill, and property summary right inside the canvas cell.',
+    editorTr: 'Çift modlu (Görsel Key-Value satır düzenleyici + canlı doğrulamalı Raw JSON kod editörü) popover açılır.',
+    editorEn: 'Opens a dual-mode popover editor with Visual Key-Value Builder and Raw JSON editor tabs.',
+    propsList: [
+      { prop: 'objectDisplayKey', type: 'string', descTr: 'Hücrede ilk sırada öne çıkarılacak anahtar adı (ör. "tier")', descEn: 'Primary object property key to highlight first in the cell' },
+    ],
+    sampleColumnDef: {
+      id: 'metadata',
+      title: 'Metadata (object / JSON)',
+      type: 'object',
+      width: 260,
+      objectDisplayKey: 'tier',
+    },
+    sampleRows: [
+      { id: 1, company: 'Acme Global', metadata: { tier: 'Enterprise', sla: '99.99%', costCenter: 'CC-201' } },
+      { id: 2, company: 'Nexus Cloud', metadata: { tier: 'Strategic', sla: '99.95%', costCenter: 'CC-202' } },
+      { id: 3, company: 'Vertex Labs', metadata: { tier: 'Growth', sla: '99.90%', costCenter: 'CC-203' } },
+    ],
+    code: `{
+  id: 'metadata',
+  title: 'Metadata (Object / JSON)',
+  type: 'object',
+  width: 250,
+  objectDisplayKey: 'tier',
+}`,
+  },
+  {
+    type: 'date',
+    colId: 'date',
+    category: 'structured',
+    categoryLabelTr: 'Yapısal & Tarih/Saat',
+    categoryLabelEn: 'Structured & Date/Time',
+    titleTr: 'Tarih Sütunu (Date)',
+    titleEn: 'Date Column (date)',
+    dataType: 'string (ISO YYYY-MM-DD)',
+    sampleValue: '"2025-05-14"',
+    summaryTr:
+      'Yıl-Ay-Gün formatındaki tarih verilerini yerel dile uygun (TR: 14.05.2025, EN: May 14, 2025) takvim ikonuyla gösterir.',
+    summaryEn:
+      'Renders ISO date strings ("YYYY-MM-DD") with a calendar icon and locale-aware date formatting.',
+    editorTr: 'Aylık/yıllık gezinmeli, "Bugün" ve "Temizle" butonlu interaktif takvim (DatePicker) açılır.',
+    editorEn: 'Opens an interactive monthly calendar popover with Today/Clear shortcuts.',
+    propsList: [],
+    sampleColumnDef: {
+      id: 'date',
+      title: 'Registered (date)',
+      type: 'date',
+      width: 170,
+    },
+    sampleRows: [
+      { id: 1, company: 'Acme Global', date: '2025-05-14' },
+      { id: 2, company: 'Nexus Cloud', date: '2025-06-22' },
+      { id: 3, company: 'Vertex Labs', date: '2025-08-09' },
+    ],
+    code: `{
+  id: 'date',
+  title: 'Registered Date',
+  type: 'date',
+  width: 150,
+  sortable: true,
+  filterable: true,
+}`,
+  },
+  {
+    type: 'datetime',
+    colId: 'lastAuditAt',
+    category: 'structured',
+    categoryLabelTr: 'Yapısal & Tarih/Saat',
+    categoryLabelEn: 'Structured & Date/Time',
+    titleTr: 'Tarih ve Saat Sütunu (DateTime)',
+    titleEn: 'Date & Time Column (datetime)',
+    dataType: 'string (YYYY-MM-DD HH:mm)',
+    sampleValue: '"2025-05-14 14:30"',
+    summaryTr:
+      'Denetim zamanı (Audit Timestamp), işlem anı veya randevu tarihi gibi hem gün hem saat/dakika içeren veriler için kullanılır.',
+    summaryEn:
+      'Displays combined date and 24-hour time stamps ("YYYY-MM-DD HH:mm") with a distinct clock-badge highlight.',
+    editorTr: 'Takvim seçici ile birlikte Saat (00-23) ve Dakika (00-59) seçici tekerlekleri içeren birleşik pencere açılır.',
+    editorEn: 'Opens a unified Calendar + Hour/Minute time selector popover.',
+    propsList: [],
+    sampleColumnDef: {
+      id: 'lastAuditAt',
+      title: 'Last Audit (datetime)',
+      type: 'datetime',
+      width: 200,
+    },
+    sampleRows: [
+      { id: 1, company: 'Acme Global', lastAuditAt: '2025-05-14 14:30' },
+      { id: 2, company: 'Nexus Cloud', lastAuditAt: '2025-06-22 09:15' },
+      { id: 3, company: 'Vertex Labs', lastAuditAt: '2025-08-09 17:45' },
+    ],
+    code: `{
+  id: 'lastAuditAt',
+  title: 'Last Audit (DateTime)',
+  type: 'datetime',
+  width: 185,
+  sortable: true,
+  filterable: true,
+}`,
+  },
+  {
+    type: 'time',
+    colId: 'cutoffTime',
+    category: 'structured',
+    categoryLabelTr: 'Yapısal & Tarih/Saat',
+    categoryLabelEn: 'Structured & Date/Time',
+    titleTr: 'Saat Sütunu (Time)',
+    titleEn: 'Time Column (time)',
+    dataType: 'string (HH:mm)',
+    sampleValue: '"09:30" | "17:45"',
+    summaryTr:
+      'Vardiya saati, son işlem saati (Cut-off Time) veya günlük periyodik saat bilgileri için kullanılır.',
+    summaryEn:
+      'Renders 24-hour time values ("HH:mm") with a clock icon for shift schedules or daily cut-off times.',
+    editorTr: 'Hızlı saat dilimi (08:30, 09:00, 14:00 vb.) ve Saat/Dakika seçici penceresi açılır.',
+    editorEn: 'Opens a quick-slot time picker with custom hour and minute selectors.',
+    propsList: [],
+    sampleColumnDef: {
+      id: 'cutoffTime',
+      title: 'Cut-off (time)',
+      type: 'time',
+      width: 155,
+    },
+    sampleRows: [
+      { id: 1, company: 'Acme Global', cutoffTime: '09:30' },
+      { id: 2, company: 'Nexus Cloud', cutoffTime: '14:00' },
+      { id: 3, company: 'Vertex Labs', cutoffTime: '17:45' },
+    ],
+    code: `{
+  id: 'cutoffTime',
+  title: 'Cut-off Time',
+  type: 'time',
+  width: 140,
+}`,
+  },
+];
