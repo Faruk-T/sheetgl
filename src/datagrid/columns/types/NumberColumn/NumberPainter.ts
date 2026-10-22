@@ -2,34 +2,43 @@ import { CellPaintContext } from '../../IColumnTypePlugin';
 
 const formatters = new Map<string, Intl.NumberFormat>();
 
-function getFormatter(minDigits: number, maxDigits: number, useGrouping: boolean = true): Intl.NumberFormat {
-  const key = `${minDigits}_${maxDigits}_${useGrouping}`;
+function getFormatter(localeCode: string, minDigits: number, maxDigits: number, useGrouping: boolean = true): Intl.NumberFormat {
+  const key = `${localeCode}_${minDigits}_${maxDigits}_${useGrouping}`;
   let fmt = formatters.get(key);
   if (!fmt) {
-    fmt = new Intl.NumberFormat('tr-TR', {
-      minimumFractionDigits: minDigits,
-      maximumFractionDigits: maxDigits,
-      useGrouping,
-    });
+    try {
+      fmt = new Intl.NumberFormat(localeCode, {
+        minimumFractionDigits: minDigits,
+        maximumFractionDigits: maxDigits,
+        useGrouping,
+      });
+    } catch {
+      fmt = new Intl.NumberFormat('tr-TR', {
+        minimumFractionDigits: minDigits,
+        maximumFractionDigits: maxDigits,
+        useGrouping,
+      });
+    }
     formatters.set(key, fmt);
   }
   return fmt;
 }
 
-export function paintNumber({ ctx, value, column, theme, x, y, width, height }: CellPaintContext<number>): void {
+export function paintNumber({ ctx, value, column, theme, locale, x, y, width, height }: CellPaintContext<number>): void {
   if (value === null || value === undefined || value === ('' as any) || isNaN(Number(value))) return;
 
   const num = Number(value);
+  const code = locale?.code || 'tr-TR';
   let formatted: string;
 
   if (column.id === 'id') {
     formatted = String(Math.trunc(num));
   } else if (column.decimalDigits !== undefined) {
-    formatted = getFormatter(column.decimalDigits, column.decimalDigits, true).format(num);
+    formatted = getFormatter(code, column.decimalDigits, column.decimalDigits, true).format(num);
   } else if (Number.isInteger(num)) {
-    formatted = getFormatter(0, 0, true).format(num);
+    formatted = getFormatter(code, 0, 0, true).format(num);
   } else {
-    formatted = getFormatter(0, 2, true).format(num);
+    formatted = getFormatter(code, 0, 2, true).format(num);
   }
 
   ctx.save();

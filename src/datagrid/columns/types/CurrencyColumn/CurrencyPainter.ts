@@ -1,26 +1,41 @@
 import { CellPaintContext } from '../../IColumnTypePlugin';
 
-const formatters = new Map<number, Intl.NumberFormat>();
+const formatters = new Map<string, Intl.NumberFormat>();
 
-function getFormatter(digits: number): Intl.NumberFormat {
-  let fmt = formatters.get(digits);
+function getFormatter(localeCode: string, digits: number): Intl.NumberFormat {
+  const key = `${localeCode}_${digits}`;
+  let fmt = formatters.get(key);
   if (!fmt) {
-    fmt = new Intl.NumberFormat('tr-TR', {
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
-    });
-    formatters.set(digits, fmt);
+    try {
+      fmt = new Intl.NumberFormat(localeCode, {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      });
+    } catch {
+      fmt = new Intl.NumberFormat('tr-TR', {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      });
+    }
+    formatters.set(key, fmt);
   }
   return fmt;
 }
 
-export function paintCurrency({ ctx, value, column, theme, x, y, width, height }: CellPaintContext<number>): void {
+export function paintCurrency({ ctx, value, column, theme, locale, x, y, width, height }: CellPaintContext<number>): void {
   if (value === null || value === undefined || isNaN(Number(value))) return;
 
   const num = Number(value);
   const digits = column.decimalDigits ?? 2;
   const symbol = column.currencySymbol ?? '₺';
-  const formatted = `${getFormatter(digits).format(num)} ${symbol}`;
+  const code = locale?.code || 'tr-TR';
+  const isTR = code.startsWith('tr');
+  const numStr = getFormatter(code, digits).format(num);
+  const formatted = isTR
+    ? `${numStr} ${symbol}`
+    : num < 0
+    ? `-${symbol}${numStr.replace(/^-/, '')}`
+    : `${symbol}${numStr}`;
 
   ctx.save();
   ctx.beginPath();

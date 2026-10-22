@@ -1,29 +1,19 @@
 import { CellPaintContext } from '../../IColumnTypePlugin';
+import { FilterEngine } from '../../../core/FilterEngine';
 
-export function formatDateTimeDisplay(value: string | Date): { datePart: string; timePart: string } {
+export function formatDateTimeDisplay(
+  value: string | Date,
+  localeCode: string = 'tr-TR'
+): { datePart: string; timePart: string } {
   if (!value) return { datePart: '', timePart: '' };
-  try {
-    const raw = typeof value === 'string' ? value.trim() : value.toISOString();
-    const match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s]+(\d{1,2}):(\d{1,2}))?/);
-    if (match) {
-      const yr = match[1];
-      const mon = match[2].padStart(2, '0');
-      const day = match[3].padStart(2, '0');
-      const hh = (match[4] || '09').padStart(2, '0');
-      const mm = (match[5] || '00').padStart(2, '0');
-      return { datePart: `${day}.${mon}.${yr}`, timePart: `${hh}:${mm}` };
-    }
-    const d = typeof value === 'string' ? new Date(value) : value;
-    if (!isNaN(d.getTime())) {
-      const day = String(d.getDate()).padStart(2, '0');
-      const mon = String(d.getMonth() + 1).padStart(2, '0');
-      const yr = d.getFullYear();
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      return { datePart: `${day}.${mon}.${yr}`, timePart: `${hh}:${mm}` };
-    }
-  } catch {
-    // fallback
+  const parsed = FilterEngine.parseDateParts(value);
+  if (parsed) {
+    const hh = String(parsed.hasTime ? parsed.hour : 9).padStart(2, '0');
+    const mm = String(parsed.hasTime ? parsed.minute : 0).padStart(2, '0');
+    return {
+      datePart: FilterEngine.formatLocalizedDate(value, localeCode),
+      timePart: `${hh}:${mm}`,
+    };
   }
   return { datePart: String(value), timePart: '' };
 }
@@ -32,6 +22,7 @@ export function paintDateTime({
   ctx,
   value,
   theme,
+  locale,
   x,
   y,
   width,
@@ -42,7 +33,7 @@ export function paintDateTime({
   ctx.save();
 
   if (value) {
-    const { datePart, timePart } = formatDateTimeDisplay(value);
+    const { datePart, timePart } = formatDateTimeDisplay(value, locale?.code);
 
     ctx.save();
     ctx.beginPath();

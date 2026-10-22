@@ -1,9 +1,11 @@
 import { CellPaintContext } from '../../IColumnTypePlugin';
+import { FilterEngine } from '../../../core/FilterEngine';
 
 export function paintDate({
   ctx,
   value,
   theme,
+  locale,
   x,
   y,
   width,
@@ -14,25 +16,7 @@ export function paintDate({
   ctx.save();
 
   if (value) {
-    let dateStr = '';
-    try {
-      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-        const [yr, mon, day] = value.slice(0, 10).split('-');
-        dateStr = `${day}.${mon}.${yr}`;
-      } else {
-        const d = typeof value === 'string' ? new Date(value) : value;
-        if (!isNaN(d.getTime())) {
-          const day = String(d.getDate()).padStart(2, '0');
-          const mon = String(d.getMonth() + 1).padStart(2, '0');
-          const yr = d.getFullYear();
-          dateStr = `${day}.${mon}.${yr}`;
-        } else {
-          dateStr = String(value);
-        }
-      }
-    } catch {
-      dateStr = String(value);
-    }
+    const dateStr = FilterEngine.formatLocalizedDate(value, locale?.code);
 
     ctx.save();
     ctx.beginPath();

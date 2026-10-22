@@ -1,7 +1,8 @@
 import { CellPaintContext } from '../../IColumnTypePlugin';
 
-export function paintProgress({ ctx, value, theme, x, y, width, height }: CellPaintContext<number>): void {
+export function paintProgress({ ctx, value, theme, locale, x, y, width, height }: CellPaintContext<number>): void {
   const pct = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  const isTR = (locale?.code || 'tr-TR').startsWith('tr');
   const pad = 6;
   const barH = 18;
   const barY = y + (height - barH) / 2;
@@ -30,7 +31,7 @@ export function paintProgress({ ctx, value, theme, x, y, width, height }: CellPa
   ctx.font = `600 11px ${theme.fontFamily}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`%${pct}`, x + width / 2, y + height / 2);
+  ctx.fillText(isTR ? `%${pct}` : `${pct}%`, x + width / 2, y + height / 2);
 
   ctx.restore();
 }

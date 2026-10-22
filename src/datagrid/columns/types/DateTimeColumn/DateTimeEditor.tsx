@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CellEditorProps } from '../../IColumnTypePlugin';
+import { FilterEngine } from '../../../core/FilterEngine';
+import { MaterialIcon } from '../../../ui/MaterialIcon';
 
 interface ParsedDateTime {
   year: number;
@@ -65,7 +67,10 @@ export const DateTimeEditor: React.FC<CellEditorProps<string>> = ({
   onCancel,
 }) => {
   const initial = parseDateTimeParts(value);
-  const [textVal, setTextVal] = useState<string>(value ? initial.formatted : initial.formatted);
+  const localeCode = locale?.code || 'tr-TR';
+  const [textVal, setTextVal] = useState<string>(() =>
+    FilterEngine.formatLocalizedDate(initial.formatted, localeCode, true)
+  );
   const [viewYear, setViewYear] = useState<number>(initial.year);
   const [viewMonth, setViewMonth] = useState<number>(initial.month);
   const [selDay, setSelDay] = useState<number>(initial.day);
@@ -77,6 +82,25 @@ export const DateTimeEditor: React.FC<CellEditorProps<string>> = ({
   const latestValRef = useRef<string>(textVal);
   latestValRef.current = textVal;
 
+  const buildFormatted = (y: number, m: number, d: number, hh: number, mm: number) =>
+    `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+
+  const normalizeDateTimeCommit = (rawStr: string): string => {
+    const trimmed = rawStr.trim();
+    if (!trimmed) return '';
+    const p = FilterEngine.parseDateParts(trimmed);
+    if (p) {
+      return buildFormatted(
+        p.year,
+        p.month,
+        p.day,
+        p.hasTime ? p.hour : selHour,
+        p.hasTime ? p.minute : selMinute
+      );
+    }
+    return buildFormatted(viewYear, viewMonth, selDay, selHour, selMinute);
+  };
+
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -85,15 +109,12 @@ export const DateTimeEditor: React.FC<CellEditorProps<string>> = ({
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onCommit(latestValRef.current, 'none');
+        onCommit(normalizeDateTimeCommit(latestValRef.current), 'none');
       }
     };
     document.addEventListener('mousedown', handleOutside, true);
     return () => document.removeEventListener('mousedown', handleOutside, true);
-  }, [onCommit]);
-
-  const buildFormatted = (y: number, m: number, d: number, hh: number, mm: number) =>
-    `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }, [onCommit, viewYear, viewMonth, selDay, selHour, selMinute]);
 
   const updateParts = (y: number, m: number, d: number, hh: number, mm: number) => {
     setViewYear(y);
@@ -101,7 +122,8 @@ export const DateTimeEditor: React.FC<CellEditorProps<string>> = ({
     setSelDay(d);
     setSelHour(hh);
     setSelMinute(mm);
-    setTextVal(buildFormatted(y, m, d, hh, mm));
+    const isoDt = buildFormatted(y, m, d, hh, mm);
+    setTextVal(FilterEngine.formatLocalizedDate(isoDt, localeCode, true));
   };
 
   const handlePrevMonth = () => {
@@ -181,16 +203,16 @@ export const DateTimeEditor: React.FC<CellEditorProps<string>> = ({
           ref={inputRef}
           type="text"
           value={textVal}
-          placeholder="YYYY-MM-DD HH:mm"
+          placeholder={isTR ? 'GG.AA.YYYY SS:DD' : 'MM/DD/YYYY HH:mm'}
           onChange={(e) => setTextVal(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === 'Enter') {
               e.preventDefault();
-              onCommit(textVal, 'down');
+              onCommit(normalizeDateTimeCommit(textVal), 'down');
             } else if (e.key === 'Tab') {
               e.preventDefault();
-              onCommit(textVal, e.shiftKey ? 'left' : 'right');
+              onCommit(normalizeDateTimeCommit(textVal), e.shiftKey ? 'left' : 'right');
             } else if (e.key === 'Escape') {
               e.preventDefault();
               onCancel();
@@ -248,13 +270,58 @@ export const DateTimeEditor: React.FC<CellEditorProps<string>> = ({
                   backgroundColor: 'transparent',
                   color: theme.dom.popoverText,
                   cursor: 'pointer',
-                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
                 }}
               >
-                ‹
+                <MaterialIcon name="chevron_left" size={15} color={theme.dom.popoverText} />
               </button>
-              <div style={{ fontWeight: 600, fontSize: 12 }}>
-                {monthNames[viewMonth - 1]} {viewYear}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <select
+                  value={viewYear}
+                  onChange={(e) => updateParts(Number(e.target.value), viewMonth, selDay, selHour, selMinute)}
+                  style={{
+                    padding: '2px 3px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    borderRadius: 4,
+                    border: `1px solid ${theme.dom.popoverBorder}`,
+                    backgroundColor: theme.dom.inputBg,
+                    color: theme.dom.popoverText,
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {Array.from({ length: 41 }, (_, i) => new Date().getFullYear() - 25 + i).map((yr) => (
+                    <option key={yr} value={yr}>
+                      {yr}
+                    </option>
+                  ))}
+                </select>
+                <MaterialIcon name="chevron_right" size={12} color="#8E8E93" />
+                <select
+                  value={viewMonth}
+                  onChange={(e) => updateParts(viewYear, Number(e.target.value), selDay, selHour, selMinute)}
+                  style={{
+                    padding: '2px 3px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    borderRadius: 4,
+                    border: `1px solid ${theme.dom.popoverBorder}`,
+                    backgroundColor: theme.dom.inputBg,
+                    color: theme.dom.popoverText,
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {monthNames.map((mName, i) => (
+                    <option key={i + 1} value={i + 1}>
+                      {String(i + 1).padStart(2, '0')} - {mName}
+                    </option>
+                  ))}
+                </select>
               </div>
               <button
                 type="button"
@@ -267,10 +334,13 @@ export const DateTimeEditor: React.FC<CellEditorProps<string>> = ({
                   backgroundColor: 'transparent',
                   color: theme.dom.popoverText,
                   cursor: 'pointer',
-                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
                 }}
               >
-                ›
+                <MaterialIcon name="chevron_right" size={15} color={theme.dom.popoverText} />
               </button>
             </div>
 

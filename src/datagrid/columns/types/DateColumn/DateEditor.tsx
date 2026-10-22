@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CellEditorProps } from '../../IColumnTypePlugin';
+import { FilterEngine } from '../../../core/FilterEngine';
+import { MaterialIcon } from '../../../ui/MaterialIcon';
 
 function parseIsoParts(raw: any): { year: number; month: number; day: number; formatted: string } {
   const now = new Date();
@@ -68,7 +70,10 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
   onCancel,
 }) => {
   const initial = parseIsoParts(value);
-  const [dateVal, setDateVal] = useState<string>(value ? initial.formatted : '');
+  const localeCode = locale?.code || 'tr-TR';
+  const [dateVal, setDateVal] = useState<string>(() =>
+    value ? FilterEngine.formatLocalizedDate(initial.formatted, localeCode) : ''
+  );
   const [viewYear, setViewYear] = useState<number>(initial.year);
   const [viewMonth, setViewMonth] = useState<number>(initial.month); // 1..12
 
@@ -76,6 +81,13 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const latestValRef = useRef<string>(dateVal);
   latestValRef.current = dateVal;
+
+  const normalizeCommitValue = (rawStr: string): string => {
+    const trimmed = rawStr.trim();
+    if (!trimmed) return '';
+    const parsed = FilterEngine.parseDateParts(trimmed);
+    return parsed ? parsed.isoDate : trimmed;
+  };
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -86,7 +98,7 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
   useEffect(() => {
     const handleOutsideMouseDown = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onCommit(latestValRef.current, 'none');
+        onCommit(normalizeCommitValue(latestValRef.current), 'none');
       }
     };
     document.addEventListener('mousedown', handleOutsideMouseDown, true);
@@ -99,10 +111,10 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
     e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
-      onCommit(dateVal, e.shiftKey ? 'none' : 'down');
+      onCommit(normalizeCommitValue(dateVal), e.shiftKey ? 'none' : 'down');
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      onCommit(dateVal, e.shiftKey ? 'left' : 'right');
+      onCommit(normalizeCommitValue(dateVal), e.shiftKey ? 'left' : 'right');
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onCancel();
@@ -189,12 +201,12 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
           ref={inputRef}
           type="text"
           value={dateVal}
-          placeholder="YYYY-MM-DD"
+          placeholder={isTR ? 'GG.AA.YYYY' : 'MM/DD/YYYY'}
           onChange={(e) => {
             const val = e.target.value;
             setDateVal(val);
-            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
-              const p = parseIsoParts(val);
+            const p = FilterEngine.parseDateParts(val);
+            if (p) {
               setViewYear(p.year);
               setViewMonth(p.month);
             }
@@ -250,13 +262,58 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
               backgroundColor: 'transparent',
               color: theme.dom.popoverText,
               cursor: 'pointer',
-              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
             }}
           >
-            ‹
+            <MaterialIcon name="chevron_left" size={16} color={theme.dom.popoverText} />
           </button>
-          <div style={{ fontWeight: 600, fontSize: 12 }}>
-            {monthNames[viewMonth - 1]} {viewYear}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <select
+              value={viewYear}
+              onChange={(e) => setViewYear(Number(e.target.value))}
+              style={{
+                padding: '2px 4px',
+                fontSize: 11.5,
+                fontWeight: 700,
+                borderRadius: 5,
+                border: `1px solid ${theme.dom.popoverBorder}`,
+                backgroundColor: theme.dom.inputBg,
+                color: theme.dom.popoverText,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {Array.from({ length: 41 }, (_, i) => new Date().getFullYear() - 25 + i).map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+            <MaterialIcon name="chevron_right" size={13} color="#8E8E93" />
+            <select
+              value={viewMonth}
+              onChange={(e) => setViewMonth(Number(e.target.value))}
+              style={{
+                padding: '2px 4px',
+                fontSize: 11.5,
+                fontWeight: 600,
+                borderRadius: 5,
+                border: `1px solid ${theme.dom.popoverBorder}`,
+                backgroundColor: theme.dom.inputBg,
+                color: theme.dom.popoverText,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {monthNames.map((mName, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {String(i + 1).padStart(2, '0')} - {mName}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             type="button"
@@ -269,10 +326,13 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
               backgroundColor: 'transparent',
               color: theme.dom.popoverText,
               cursor: 'pointer',
-              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
             }}
           >
-            ›
+            <MaterialIcon name="chevron_right" size={16} color={theme.dom.popoverText} />
           </button>
         </div>
 
