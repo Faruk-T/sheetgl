@@ -10,7 +10,7 @@ This guide walks you through building two types of custom plugins:
 
 ## 1. Zero-DOM Plugin: User Avatar & Status Dot
 
-A Zero-DOM plugin draws directly onto the Canvas 2D context and requires **no HTML elements**, providing maximum performance (60 FPS with 10,000+ items).
+A Zero-DOM plugin draws directly onto the Canvas 2D context and requires **no HTML elements**, providing maximum performance with 10,000+ items.
 
 ### Implementation (`AvatarColumnPlugin.ts`)
 

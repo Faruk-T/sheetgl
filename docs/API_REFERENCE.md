@@ -16,6 +16,8 @@ import { SheetGL, SheetGLProps } from 'sheetgl';
 | :--- | :--- | :--- | :--- |
 | `dataSource` | `any[] \| IDataStore` | *Required* | Array of JavaScript objects for client mode, or an `IDataStore` instance (e.g. `RemoteDataStore`). |
 | `columns` | `ColumnDef[]` | *Required* | Array of column definitions determining grid layout, sorting, and cell types. |
+| `columnGroups` | `ColumnGroupDef[]` | `[]` | Optional Banded Column Group definitions for multi-level header bands and group-wide Dark/Light coloring. |
+| `groupHeaderHeight` | `number` | `30` | Height in pixels for the top Banded Column Group header row when column groups are active. |
 | `theme` | `ThemeInput` | `'apple-light'` | Theme name (`'apple-light'`, `'apple-dark'`, `'google-light'`, `'google-dark'`, `'system'`) or custom `IGridThemeTokens`. |
 | `locale` | `LocaleInput` | `'en'` | Locale code (`'en'`, `'tr'`) or a partial `IGridLocale` object overriding specific UI labels. |
 | `rowHeight` | `number` | `34` | Height in pixels for each grid data row. |
@@ -46,6 +48,16 @@ export interface ColumnDef {
   groupable?: boolean;
   readonly?: boolean;
   align?: 'left' | 'center' | 'right';
+
+  // Banded Column Group & Dark/Light Theme-Aware Coloring
+  headerGroup?: string | ColumnGroupDef;
+  groupId?: string;
+  color?: ThemeAwareColor;          // Preset ('blue' | 'indigo' | 'emerald' | ...) or { light, dark }
+  headerColor?: ThemeAwareColor;    // Custom header background color
+  headerTextColor?: ThemeAwareColor;// Custom header text color
+  columnColor?: ThemeAwareColor;    // Custom column cell background color
+  columnTextColor?: ThemeAwareColor;// Custom column cell text color
+  style?: ColumnColorConfig;        // Granular { headerBg, headerText, headerAccent, columnBg, columnText, borderColor }
 
   // Column-Specific Options
   currencySymbol?: string;          // Used by 'currency' column (e.g. '$', '€', '₺')

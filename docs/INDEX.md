@@ -1,13 +1,13 @@
 # SheetGL Documentation Index
 
-Welcome to the official documentation for **SheetGL Pro**, the ultra-fast HTML5 Canvas DataGrid for React.
+Welcome to the official documentation for **SheetGL**, the ultra-fast HTML5 Canvas DataGrid for React.
 
 ---
 
 ## 📚 Guides & Specifications
 
 - [**Architecture & Technical Design**](file:///d:/Works/2026/datagrid/docs/ARCHITECTURE.md)
-  Deep dive into the 60 FPS Canvas rendering pipeline, mathematical geometry engines, prefix-sum binary search, zero-DOM vs micro-DOM lifecycles, and dual-bridge theming.
+  Deep dive into the high-performance Canvas rendering pipeline, mathematical geometry engines, prefix-sum binary search, zero-DOM vs micro-DOM lifecycles, and dual-bridge theming.
 
 - [**API Reference**](file:///d:/Works/2026/datagrid/docs/API_REFERENCE.md)
   Full TypeScript interface specifications for `<SheetGL />`, `ColumnDef`, `IDataStore`, `IColumnTypePlugin`, `IGridThemeTokens`, and `IGridLocale`.

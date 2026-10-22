@@ -1,6 +1,6 @@
-# SheetGL Pro v2.0 — 60 FPS WebGL & Canvas Excel DataGrid for React
+# SheetGL v1.0.6 — WebGL & Canvas Excel DataGrid for React
 
-> SheetGL Pro is a zero-dependency, MIT-licensed 60 FPS HTML5 Canvas & WebGL Excel DataGrid component for React 18 and React 19.
+> SheetGL is a zero-dependency, MIT-licensed high-performance HTML5 Canvas & WebGL Excel DataGrid component for React 18 and React 19.
 
 ## Key Routes
 - `/` — Product Overview & Interactive Embedded Preview
@@ -20,3 +20,4 @@ npx sheetgl init
 - **3-Tier Permissions**: Grid-level (`permissions.mode`: `'write' | 'readonly' | 'read'`), column-level (`permission: 'readonly'`), and conditional row/cell rules (`canEdit: (row) => boolean`, `validator: (val) => ({ valid, message })`).
 - **Lifecycle Events & Async Backend Cascade**: `setCellValue(newData, newValue, currentRow)` supports returning a `Promise` to fetch dependent values from a backend API and update multiple columns atomically. Lifecycle hooks include `onEditingStart`, `onCellValueChanging`, `onCellValueChanged`, `onRowInserted`, `onRowRemoved`, `onSaving`, and `onSaved`.
 - **Batch CRUD & Summaries**: `batchEditMode={true}` highlights modified cells in green (DevExtreme style) and commits `{ inserted, updated, deleted }` atomically via `onSaving`. Footer & group summaries support `sum`, `avg`, `min`, `max`, and `count`.
+- **Banded Column Groups & Theme-Aware Coloring**: Group columns under top banded headers via `columnGroups: ColumnGroupDef[]` or `col.headerGroup`. Assign Dark & Light theme-adaptive colors to groups, column headers (`headerColor`), and column cells (`columnColor`) using 13 semantic presets (`'blue' | 'indigo' | 'violet' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'teal' | ...`) or `{ light: string, dark: string }` objects.

@@ -1,19 +1,19 @@
-# SheetGL Pro v2.0 Enterprise ⚡
+# SheetGL v1.0.6 ⚡
 
 > **Next-Generation High-Performance WebGL & Canvas Excel DataGrid for React**  
-> Combining **GPU-Accelerated 60 FPS Canvas Virtualization** and **Microsoft Excel UX** with **Enterprise DataGrid Architecture** (Full Event Lifecycle, Async Cascading Backend Lookups, Dynamic Summaries, Batch CRUD, and Role-Based Permissions). Zero dependencies, zero DOM bloat, **100% Free under the MIT License**.
+> Combining **GPU-Accelerated Canvas Virtualization** and **Microsoft Excel UX** with **Enterprise DataGrid Architecture** (Full Event Lifecycle, Async Cascading Backend Lookups, Dynamic Summaries, Batch CRUD, and Role-Based Permissions). Zero dependencies, zero DOM bloat, **100% Free under the MIT License**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue.svg)](https://www.typescriptlang.org)
-[![Performance](https://img.shields.io/badge/Performance-60_FPS_Canvas-success.svg)](#)
+[![Performance](https://img.shields.io/badge/Performance-Zero_DOM_Canvas-success.svg)](#)
 [![i18n](https://img.shields.io/badge/i18n-Multi--Language-orange.svg)](#)
 
 ---
 
-## 🌟 Key Highlights in v2.0
+## 🌟 Key Highlights in v1.0.6
 
-- 🏎️ **Ultra-Fast 60 FPS Canvas Virtualization:** Renders 10,000–100,000+ rows and dozens of columns on a single high-DPI `<canvas>` element with right-side live scroll indicators, quick jump controls (`⤒` / `⤓`), and automatic edge-scrolling during drag operations.
+- 🏎️ **Ultra-Fast Canvas Virtualization:** Renders 10,000–100,000+ rows and dozens of columns on a single high-DPI `<canvas>` element with right-side live scroll indicators, quick jump controls (`⤒` / `⤓`), and automatic edge-scrolling during drag operations.
 - 📐 **Complete Microsoft Excel UX:**
   - **Bottom-Right Fill Handle & Smart AutoFill:** Drag the corner square across rows or columns to duplicate values or auto-increment sequential codes (`ACC-100001` → `ACC-100002`).
   - **Right-Side Quick Cell Duplicate Handle (`+`):** Click or drag the right-edge `+` pill on any active selection to duplicate cell values.
@@ -37,12 +37,12 @@
 
 ## ⚖️ Comparison: SheetGL vs. Traditional Grids
 
-| Feature | SheetGL Pro v2.0 | Traditional Enterprise Grids | AG-Grid Enterprise | Standard React Table |
+| Feature | SheetGL v1.0.6 | Traditional Enterprise Grids | AG-Grid Enterprise | Standard React Table |
 | :--- | :---: | :---: | :---: | :---: |
 | **Licensing** | **Free (MIT)** | Commercial ($1,200+/yr) | Commercial ($1,200+/yr) | Free (MIT) |
 | **Rendering Engine** | **HTML5 Canvas 2D** | DOM Virtualization | DOM Virtualization | 100% DOM Nodes |
 | **DOM Overhead** | **1 Canvas Element** | 500+ DOM Nodes | 400+ DOM Nodes | 1,000+ DOM Nodes |
-| **Scroll Performance (100k rows)** | **Silky 60 FPS** | 30–45 FPS | 45–55 FPS | Lag / Crash |
+| **Scroll Performance (100k rows)** | **Ultra-Smooth** | Moderate | Fast | Lag / Crash |
 | **Memory Footprint** | **~15 MB** | ~60 MB | ~55 MB | 150+ MB |
 | **Fill Handle & Quick Duplicate** | **Built-in** | ❌ Manual | Plugin | ❌ Not supported |
 | **Async Cascading Lookups** | **Built-in** | Supported | ❌ Complex | ❌ Not supported |

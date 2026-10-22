@@ -19,9 +19,9 @@ const RESET = '\x1b[0m';
 function readPkgVersion() {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, 'package.json'), 'utf8'));
-    return pkg.version || '2.0.0';
+    return pkg.version || '1.0.6';
   } catch {
-    return '2.0.0';
+    return '1.0.6';
   }
 }
 
@@ -29,7 +29,7 @@ function printBanner() {
   const version = readPkgVersion();
   console.log(`
 ${CYAN}${BOLD}  ╔══════════════════════════════════════════════════════════════╗
-  ║   ⚡ SheetGL Pro v${version} — Enterprise Canvas Excel DataGrid   ║
+  ║   ⚡ SheetGL v${version} — Enterprise Canvas Excel DataGrid   ║
   ╚══════════════════════════════════════════════════════════════╝${RESET}
 `);
 }
@@ -249,7 +249,7 @@ function handleCreate(projectName) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${projectName} — SheetGL Pro</title>
+    <title>${projectName} — SheetGL</title>
   </head>
   <body style="margin:0;padding:0;overflow:hidden;">
     <div id="root"></div>

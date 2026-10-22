@@ -1,6 +1,6 @@
 # SheetGL Architecture & Technical Design
 
-This document details the internal architecture, mathematical models, rendering pipeline, and engineering decisions behind **SheetGL Pro**.
+This document details the internal architecture, mathematical models, rendering pipeline, and engineering decisions behind **SheetGL**.
 
 ---
 
@@ -8,7 +8,7 @@ This document details the internal architecture, mathematical models, rendering 
 
 SheetGL is engineered to solve the fundamental performance bottleneck of enterprise web data grids: **DOM Bloat**.
 
-In standard HTML/DOM-based grids (e.g., standard React tables or unvirtualized grids), rendering 10,000 rows with 30 columns produces **300,000+ DOM nodes**, resulting in extreme memory usage (300MB+), catastrophic layout thrashing, and unplayable frame rates (5–15 FPS).
+In standard HTML/DOM-based grids (e.g., standard React tables or unvirtualized grids), rendering 10,000 rows with 30 columns produces **300,000+ DOM nodes**, resulting in extreme memory usage (300MB+), catastrophic layout thrashing, and sluggish rendering.
 
 SheetGL completely sidesteps the DOM tree by utilizing a **Single-Canvas 2D Rendering Pipeline** with an ephemeral **Micro-DOM Floating Layer**:
 
@@ -27,7 +27,7 @@ SheetGL completely sidesteps the DOM tree by utilizing a **Single-Canvas 2D Rend
     ▼                                                               ▼
 ┌──────────────────────────────────────┐          ┌───────────────────────────────────┐
 │         Physical HTML5 Canvas        │          │    Virtual Scroll & Event Box     │
-│   (Single <canvas> element at 60FPS) │          │  (Zero-DOM transparent container) │
+│     (Single <canvas> surface)        │          │  (Zero-DOM transparent container) │
 │ - Header cells & sort glyphs         │          └─────────────────┬─────────────────┘
 │ - Data cells via Column Plugins      │                            │
 │ - Zero-DOM checkboxes & ratings      │                            ▼
