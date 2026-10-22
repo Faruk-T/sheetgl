@@ -2,6 +2,20 @@ import { FilterDescriptor, FilterOperation, SingleFilter } from '../types/filter
 
 export const BLANK_FILTER_TOKEN = '__SHEETGL_BLANK__';
 
+export interface ParsedDateInfo {
+  year: number;
+  month: number; // 1..12
+  day: number; // 1..31
+  hour: number;
+  minute: number;
+  second: number;
+  hasTime: boolean;
+  isoDate: string; // YYYY-MM-DD
+  startOfDayMs: number;
+  endOfDayMs: number;
+  exactMs: number;
+}
+
 interface CompiledSetCache {
   rawSet: Set<any>;
   lowerSet: Set<string>;
@@ -10,6 +24,48 @@ interface CompiledSetCache {
 
 export class FilterEngine {
   private static inSetCache = new WeakMap<any[], CompiledSetCache>();
+  private static dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+  public static formatLocalizedDate(
+    val: any,
+    localeCode: string = 'tr-TR',
+    includeTime: boolean = false
+  ): string {
+    if (val === null || val === undefined || val === '' || val === BLANK_FILTER_TOKEN) {
+      return '';
+    }
+    const parsed = this.parseDateParts(val);
+    if (!parsed) return String(val);
+
+    const code = localeCode || 'tr-TR';
+    let fmt = this.dateFormatterCache.get(code);
+    if (!fmt) {
+      try {
+        fmt = new Intl.DateTimeFormat(code, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          timeZone: 'UTC',
+        });
+      } catch {
+        fmt = new Intl.DateTimeFormat('tr-TR', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          timeZone: 'UTC',
+        });
+      }
+      this.dateFormatterCache.set(code, fmt);
+    }
+
+    const dateStr = fmt.format(new Date(parsed.startOfDayMs));
+    if (includeTime) {
+      const hh = String(parsed.hasTime ? parsed.hour : 9).padStart(2, '0');
+      const mm = String(parsed.hasTime ? parsed.minute : 0).padStart(2, '0');
+      return `${dateStr} ${hh}:${mm}`;
+    }
+    return dateStr;
+  }
 
   private static getCompiledSet(targetVal: any[]): CompiledSetCache {
     let cached = this.inSetCache.get(targetVal);
@@ -91,13 +147,96 @@ export class FilterEngine {
     return this.match(rawVal, op, targetVal);
   }
 
+  public static parseDateParts(val: any): ParsedDateInfo | null {
+    if (
+      val === null ||
+      val === undefined ||
+      val === '' ||
+      val === BLANK_FILTER_TOKEN ||
+      typeof val === 'number' ||
+      typeof val === 'boolean'
+    ) {
+      return null;
+    }
+
+    if (val instanceof Date) {
+      if (isNaN(val.getTime())) return null;
+      const year = val.getFullYear();
+      const month = val.getMonth() + 1;
+      const day = val.getDate();
+      const hour = val.getHours();
+      const minute = val.getMinutes();
+      const second = val.getSeconds();
+      const hasTime = hour !== 0 || minute !== 0 || second !== 0;
+      const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const startOfDayMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+      const endOfDayMs = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+      const exactMs = hasTime ? Date.UTC(year, month - 1, day, hour, minute, second, 0) : startOfDayMs;
+      return { year, month, day, hour, minute, second, hasTime, isoDate, startOfDayMs, endOfDayMs, exactMs };
+    }
+
+    if (typeof val !== 'string') return null;
+    const str = val.trim();
+    if (str.length < 8 || str.length > 35) return null;
+
+    // 1. ISO / Year-first: YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD with optional time
+    const ymdMatch = str.match(
+      /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\.\d+)?Z?)?$/
+    );
+    if (ymdMatch) {
+      const year = parseInt(ymdMatch[1], 10);
+      const month = parseInt(ymdMatch[2], 10);
+      const day = parseInt(ymdMatch[3], 10);
+      if (year >= 1000 && year <= 9999 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const hasTime = ymdMatch[4] !== undefined;
+        const hour = hasTime ? parseInt(ymdMatch[4], 10) : 0;
+        const minute = ymdMatch[5] !== undefined ? parseInt(ymdMatch[5], 10) : 0;
+        const second = ymdMatch[6] !== undefined ? parseInt(ymdMatch[6], 10) : 0;
+        const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const startOfDayMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+        const endOfDayMs = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+        const exactMs = hasTime ? Date.UTC(year, month - 1, day, hour, minute, second, 0) : startOfDayMs;
+        return { year, month, day, hour, minute, second, hasTime, isoDate, startOfDayMs, endOfDayMs, exactMs };
+      }
+    }
+
+    // 2. Day-first (DD.MM.YYYY / DD/MM/YYYY) or US Month-first (MM/DD/YYYY when p2 > 12)
+    const dmyMatch = str.match(
+      /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:[T\s]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/
+    );
+    if (dmyMatch) {
+      const p1 = parseInt(dmyMatch[1], 10);
+      const p2 = parseInt(dmyMatch[2], 10);
+      const year = parseInt(dmyMatch[3], 10);
+      const isMdy = p2 > 12 && p1 >= 1 && p1 <= 12;
+      const day = isMdy ? p2 : p1;
+      const month = isMdy ? p1 : p2;
+      if (year >= 1000 && year <= 9999 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const hasTime = dmyMatch[4] !== undefined;
+        const hour = hasTime ? parseInt(dmyMatch[4], 10) : 0;
+        const minute = dmyMatch[5] !== undefined ? parseInt(dmyMatch[5], 10) : 0;
+        const second = dmyMatch[6] !== undefined ? parseInt(dmyMatch[6], 10) : 0;
+        const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const startOfDayMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+        const endOfDayMs = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+        const exactMs = hasTime ? Date.UTC(year, month - 1, day, hour, minute, second, 0) : startOfDayMs;
+        return { year, month, day, hour, minute, second, hasTime, isoDate, startOfDayMs, endOfDayMs, exactMs };
+      }
+    }
+
+    return null;
+  }
+
   public static parseNumeric(val: any): number {
     if (typeof val === 'number') return val;
-    if (val === null || val === undefined || val === '') return NaN;
-    const raw = String(val)
-      .replace(/[^0-9.,+-]/g, '')
-      .trim();
-    if (!raw) return NaN;
+    if (val === null || val === undefined || val === '' || typeof val === 'boolean') return NaN;
+    const str = String(val).trim();
+    if (!str) return NaN;
+    // Reject strings containing alphabetic characters (e.g. "ACC-100001", "ISO-27001")
+    if (/[a-zA-ZğüşöçıİĞÜŞÖÇ]/.test(str)) return NaN;
+
+    const raw = str.replace(/[^0-9.,+-]/g, '').trim();
+    if (!raw || !/\d/.test(raw)) return NaN;
 
     const hasDot = raw.includes('.');
     const hasComma = raw.includes(',');
@@ -113,17 +252,23 @@ export class FilterEngine {
     }
 
     if (hasComma) {
-      // Check if multiple commas or 3-digit grouping like 40,000,000
-      if (/^[+-]?\d{1,3}(,\d{3}){2,}$/.test(raw)) {
+      // Single or multiple 3-digit thousands grouping: 1,000 or 130,000 or 40,000,000
+      if (/^[+-]?[1-9]\d{0,2}(,\d{3})+$/.test(raw)) {
         return parseFloat(raw.replace(/,/g, ''));
       }
-      // Decimal comma: 15000,47 -> 15000.47
+      if (raw.indexOf(',') !== raw.lastIndexOf(',')) {
+        return parseFloat(raw.replace(/,/g, ''));
+      }
+      // Decimal comma: 15000,47 or 0,500 -> 15000.47 / 0.5
       return parseFloat(raw.replace(',', '.'));
     }
 
     if (hasDot) {
-      // TR/EU thousands separator without decimals: 15.000 or 400.000 or 1.250.000
-      if (/^[+-]?\d{1,3}(\.\d{3})+$/.test(raw)) {
+      // TR/EU thousands separator without decimals: 1.000 or 15.000 or 130.000 or 1.250.000
+      if (/^[+-]?[1-9]\d{0,2}(\.\d{3})+$/.test(raw)) {
+        return parseFloat(raw.replace(/\./g, ''));
+      }
+      if (raw.indexOf('.') !== raw.lastIndexOf('.')) {
         return parseFloat(raw.replace(/\./g, ''));
       }
       return parseFloat(raw);
@@ -211,19 +356,30 @@ export class FilterEngine {
 
     const valStr = this.stringifyValue(rawVal).toLowerCase();
     const targetStr = String(targetVal ?? '').toLowerCase().trim();
-    const numRaw = typeof rawVal === 'number' ? rawVal : this.parseNumeric(rawVal);
-    const numTarget = this.parseNumeric(targetVal);
-    const bothNumeric = typeof rawVal === 'number' && !isNaN(numTarget);
+    const rawDate = this.parseDateParts(rawVal);
+    const targetDate = Array.isArray(targetVal) ? null : this.parseDateParts(targetVal);
+    const numRaw = typeof rawVal === 'number' ? rawVal : rawDate ? NaN : this.parseNumeric(rawVal);
+    const numTarget = targetDate ? NaN : this.parseNumeric(targetVal);
+    const bothNumeric = !isNaN(numRaw) && !isNaN(numTarget);
+    const bothDate = rawDate !== null && targetDate !== null;
 
     switch (op) {
       case 'contains':
         if (valStr.includes(targetStr)) return true;
+        if (rawDate) {
+          const dmy = `${String(rawDate.day).padStart(2, '0')}.${String(rawDate.month).padStart(2, '0')}.${rawDate.year}`;
+          if (rawDate.isoDate.includes(targetStr) || dmy.includes(targetStr)) return true;
+        }
         if (typeof rawVal === 'number') {
           return this.matchesFormattedNumber(rawVal, targetStr, 'contains');
         }
         return false;
       case 'notcontains':
         if (valStr.includes(targetStr)) return false;
+        if (rawDate) {
+          const dmy = `${String(rawDate.day).padStart(2, '0')}.${String(rawDate.month).padStart(2, '0')}.${rawDate.year}`;
+          if (rawDate.isoDate.includes(targetStr) || dmy.includes(targetStr)) return false;
+        }
         if (typeof rawVal === 'number' && this.matchesFormattedNumber(rawVal, targetStr, 'contains')) {
           return false;
         }
@@ -241,6 +397,10 @@ export class FilterEngine {
         }
         return false;
       case '=':
+        if (bothDate) {
+          if (!targetDate.hasTime) return rawDate.isoDate === targetDate.isoDate;
+          return rawDate.exactMs === targetDate.exactMs;
+        }
         if (bothNumeric) {
           return Math.abs(numRaw - numTarget) < 0.0001;
         }
@@ -251,34 +411,79 @@ export class FilterEngine {
         }
         return valStr === targetStr;
       case '<>':
+        if (bothDate) {
+          if (!targetDate.hasTime) return rawDate.isoDate !== targetDate.isoDate;
+          return rawDate.exactMs !== targetDate.exactMs;
+        }
         if (bothNumeric) {
           return Math.abs(numRaw - numTarget) >= 0.0001;
         }
         return valStr !== targetStr;
       case '<':
+        if (bothDate) {
+          return rawDate.exactMs < (targetDate.hasTime ? targetDate.exactMs : targetDate.startOfDayMs);
+        }
         if (bothNumeric) return numRaw < numTarget;
         return valStr < targetStr;
       case '<=':
+        if (bothDate) {
+          return rawDate.exactMs <= (targetDate.hasTime ? targetDate.exactMs : targetDate.endOfDayMs);
+        }
         if (bothNumeric) return numRaw <= numTarget;
         return valStr <= targetStr;
       case '>':
+        if (bothDate) {
+          return rawDate.exactMs > (targetDate.hasTime ? targetDate.exactMs : targetDate.endOfDayMs);
+        }
         if (bothNumeric) return numRaw > numTarget;
         return valStr > targetStr;
       case '>=':
+        if (bothDate) {
+          return rawDate.exactMs >= (targetDate.hasTime ? targetDate.exactMs : targetDate.startOfDayMs);
+        }
         if (bothNumeric) return numRaw >= numTarget;
         return valStr >= targetStr;
       case 'between': {
-        const [minRaw, maxRaw] = Array.isArray(targetVal) ? targetVal : [0, 0];
+        const [minRaw, maxRaw] = Array.isArray(targetVal) ? targetVal : [targetVal, ''];
+        const minDate = this.parseDateParts(minRaw);
+        const maxDate = this.parseDateParts(maxRaw);
+        if (rawDate && (minDate || maxDate)) {
+          if (minDate && maxDate) {
+            const [loD, hiD] =
+              minDate.startOfDayMs <= maxDate.startOfDayMs ? [minDate, maxDate] : [maxDate, minDate];
+            const loMs = loD.hasTime ? loD.exactMs : loD.startOfDayMs;
+            const hiMs = hiD.hasTime ? hiD.exactMs : hiD.endOfDayMs;
+            return rawDate.exactMs >= loMs && rawDate.exactMs <= hiMs;
+          }
+          if (minDate) {
+            const loMs = minDate.hasTime ? minDate.exactMs : minDate.startOfDayMs;
+            return rawDate.exactMs >= loMs;
+          }
+          if (maxDate) {
+            const hiMs = maxDate.hasTime ? maxDate.exactMs : maxDate.endOfDayMs;
+            return rawDate.exactMs <= hiMs;
+          }
+        }
         const minNum = this.parseNumeric(minRaw);
         const maxNum = this.parseNumeric(maxRaw);
-        if (typeof rawVal === 'number' && !isNaN(minNum) && !isNaN(maxNum)) {
-          const lo = Math.min(minNum, maxNum);
-          const hi = Math.max(minNum, maxNum);
-          return rawVal >= lo && rawVal <= hi;
+        if (!isNaN(numRaw) && (!isNaN(minNum) || !isNaN(maxNum))) {
+          if (!isNaN(minNum) && !isNaN(maxNum)) {
+            const lo = Math.min(minNum, maxNum);
+            const hi = Math.max(minNum, maxNum);
+            return numRaw >= lo && numRaw <= hi;
+          }
+          if (!isNaN(minNum)) return numRaw >= minNum;
+          if (!isNaN(maxNum)) return numRaw <= maxNum;
         }
         const minS = String(minRaw ?? '').toLowerCase().trim();
         const maxS = String(maxRaw ?? '').toLowerCase().trim();
-        return valStr >= minS && valStr <= maxS;
+        if (minS && maxS) {
+          const [loS, hiS] = minS <= maxS ? [minS, maxS] : [maxS, minS];
+          return valStr >= loS && valStr <= hiS;
+        }
+        if (minS) return valStr >= minS;
+        if (maxS) return valStr <= maxS;
+        return true;
       }
       default:
         return true;
@@ -292,6 +497,15 @@ export class FilterEngine {
       const v = row[k];
       if (v !== null && v !== undefined && v !== '') {
         parts.push(this.stringifyValue(v));
+        if (typeof v === 'string' && v.length >= 8 && v.length <= 25) {
+          const pd = this.parseDateParts(v);
+          if (pd) {
+            const dStr = String(pd.day).padStart(2, '0');
+            const mStr = String(pd.month).padStart(2, '0');
+            parts.push(`${dStr}.${mStr}.${pd.year}`);
+            parts.push(`${mStr}/${dStr}/${pd.year}`);
+          }
+        }
       }
     }
     const idx = parts.join('\x1f').toLowerCase();

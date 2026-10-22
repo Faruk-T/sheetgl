@@ -1,4 +1,5 @@
 import { SortDescriptor } from '../types/filter';
+import { FilterEngine } from './FilterEngine';
 
 export class SortEngine {
   private static collator = new Intl.Collator('tr-TR', {
@@ -35,9 +36,14 @@ export class SortEngine {
       return a - b;
     }
 
-    // Tarih karşılaştırması
+    // Tarih karşılaştırması (Date veya semantik tarih string)
     if (a instanceof Date && b instanceof Date) {
       return a.getTime() - b.getTime();
+    }
+    const dateA = FilterEngine.parseDateParts(a);
+    const dateB = FilterEngine.parseDateParts(b);
+    if (dateA && dateB) {
+      return dateA.exactMs - dateB.exactMs;
     }
 
     // Boolean karşılaştırması
