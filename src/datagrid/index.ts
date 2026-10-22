@@ -16,6 +16,8 @@ export { initDefaultColumnPlugins } from './columns/initPlugins';
 export { ThemeEngine } from './theme/ThemeEngine';
 export type { IGridThemeTokens } from './theme/IGridTheme';
 export type { ThemeInput } from './theme/ThemeEngine';
+export { ColumnColorEngine, COLUMN_COLOR_PRESET_LIST } from './theme/ColumnColorEngine';
+export type { ResolvedColumnStyle, ResolvedGroupHeaderStyle } from './theme/ColumnColorEngine';
 
 export { appleLight } from './theme/presets/appleLight';
 export { appleDark } from './theme/presets/appleDark';
@@ -24,9 +26,14 @@ export { googleDark } from './theme/presets/googleDark';
 
 export type {
   ColumnDef,
+  ColumnGroupDef,
+  ColumnColorPreset,
+  ThemeAwareColor,
+  ColumnColorConfig,
   ColumnType,
   ColumnPermission,
   GridPermissions,
+  RowSelectionMode,
   ToolbarButtonDisplayMode,
   GridToolbarCustomItem,
   GridToolbarConfig,
@@ -55,7 +62,17 @@ export type {
   GridEventLogEntry,
 } from './types/grid';
 export { ValidationEngine, Deferred, createDeferred } from './core/ValidationEngine';
-export type { IDataStore, DataGridQuery, LoadResult, RemoteOperationsConfig, BatchChanges } from './types/store';
+export { BatchChangesModal } from './overlays/BatchChangesModal';
+export type { BatchChangesModalProps } from './overlays/BatchChangesModal';
+export type {
+  IDataStore,
+  DataGridQuery,
+  LoadResult,
+  RemoteOperationsConfig,
+  BatchChanges,
+  BatchUpdatedItem,
+  BatchDeletedItem,
+} from './types/store';
 export type { FilterDescriptor, SortDescriptor, DistinctItem, FilterOperation, ColumnFilterState } from './types/filter';
 export type { GroupDescriptor, VirtualRow, SummaryDescriptor, SummaryType } from './types/group';
 

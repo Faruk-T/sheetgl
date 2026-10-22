@@ -378,11 +378,14 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
               <div
                 onMouseDown={(e) => e.stopPropagation()}
                 style={{
-                  position: 'absolute',
-                  bottom: 'calc(100% + 6px)',
-                  right: 0,
-                  width: 300,
-                  maxHeight: 340,
+                  position: 'fixed',
+                  bottom: 44,
+                  right: 12,
+                  left: 12,
+                  width: 'auto',
+                  maxWidth: 310,
+                  marginLeft: 'auto',
+                  maxHeight: '72vh',
                   overflowY: 'auto',
                   padding: 12,
                   backgroundColor: theme.dom.popoverBg,
@@ -391,7 +394,7 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
                   borderRadius: 10,
                   boxShadow: theme.dom.popoverShadow,
                   backdropFilter: theme.dom.glassBackdrop,
-                  zIndex: 200,
+                  zIndex: 500,
                 }}
               >
                 <div

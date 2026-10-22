@@ -3,6 +3,7 @@ import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ColumnDef, ToolbarButtonDisplayMode } from '../types/grid';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { MaterialIcon } from './MaterialIcon';
+import { FilterEngine } from '../core/FilterEngine';
 
 export interface FormulaBarProps {
   activeCoords: { row: number; col: number };
@@ -53,8 +54,10 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     ? isTR
       ? '[7 Günlük Trend Grafiği — Detaylı grafik görünümü için hücreye tıklayın]'
       : '[7-Day Trend Chart — Click cell to open detailed chart dialog]'
-    : currentValue != null
-    ? Array.isArray(currentValue)
+    : currentValue != null && currentValue !== ''
+    ? column?.type === 'date' || column?.type === 'datetime'
+      ? FilterEngine.formatLocalizedDate(currentValue, locale?.code, column.type === 'datetime')
+      : Array.isArray(currentValue)
       ? currentValue.join(', ')
       : typeof currentValue === 'object'
       ? JSON.stringify(currentValue)
@@ -63,6 +66,15 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
 
   const [draft, setDraft] = useState<string>(displayVal);
   const [isFocused, setIsFocused] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 680 : false
+  );
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 680);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     if (!isFocused) {
@@ -89,6 +101,14 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
       parsed = isNaN(n) ? 0 : n;
     } else if (column.type === 'boolean') {
       parsed = ['true', '1', 'yes', 'evet', 'doğru'].includes(draft.trim().toLowerCase());
+    } else if (column.type === 'date' || column.type === 'datetime') {
+      const pd = FilterEngine.parseDateParts(draft);
+      if (pd) {
+        parsed =
+          column.type === 'datetime'
+            ? `${pd.isoDate} ${String(pd.hasTime ? pd.hour : 9).padStart(2, '0')}:${String(pd.hasTime ? pd.minute : 0).padStart(2, '0')}`
+            : pd.isoDate;
+      }
     } else if (column.type === 'multiselect') {
       parsed = draft
         .split(/[,;|]/)
@@ -116,12 +136,14 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     onCommitValue(parsed);
   };
 
+  const effectiveBtnMode: ToolbarButtonDisplayMode = isMobile ? 'icon' : buttonDisplayMode;
+
   const renderBtnContent = (iconName: string, label: string, iconColor?: string) => (
     <>
-      {(buttonDisplayMode === 'icon' || buttonDisplayMode === 'icon-text') && (
+      {(effectiveBtnMode === 'icon' || effectiveBtnMode === 'icon-text') && (
         <MaterialIcon name={iconName} size={13} color={iconColor} />
       )}
-      {(buttonDisplayMode === 'icon-text' || buttonDisplayMode === 'text') && <span>{label}</span>}
+      {(effectiveBtnMode === 'icon-text' || effectiveBtnMode === 'text') && <span>{label}</span>}
     </>
   );
 
@@ -130,41 +152,45 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
       style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '4px 12px',
+        padding: isMobile ? '4px 8px' : '4px 12px',
         backgroundColor: theme.canvas.rowNumberBg,
         borderBottom: `1px solid ${theme.canvas.gridLine}`,
-        gap: 8,
+        gap: isMobile ? 5 : 8,
         fontFamily: theme.fontFamily,
         fontSize: 12,
         userSelect: 'none',
+        overflowX: 'auto',
       }}
     >
       {/* Coordinate Box (Excel Name Box) */}
       <div
         style={{
-          padding: '2px 8px',
+          padding: isMobile ? '2px 6px' : '2px 8px',
           backgroundColor: theme.canvas.bg,
           color: theme.dom.accentColor,
           border: `1px solid ${theme.canvas.gridLine}`,
           borderRadius: 4,
           fontFamily: 'monospace',
           fontWeight: 700,
-          minWidth: 84,
+          minWidth: isMobile ? 42 : 84,
           textAlign: 'center',
           fontSize: 11,
+          flexShrink: 0,
         }}
       >
         {hasMultiSpan
-          ? `${selectionSpan.rows}R × ${selectionSpan.cols}C`
+          ? `${selectionSpan.rows}×${selectionSpan.cols}`
+          : isMobile
+          ? excelRef
           : `${excelRef} (R${activeCoords.row + 1}:C${activeCoords.col + 1})`}
       </div>
 
       {/* Column Type & Permission Badges */}
       {column && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           <span
             style={{
-              padding: '2px 6px',
+              padding: '2px 5px',
               backgroundColor: theme.dom.badgeBg,
               color: theme.dom.badgeText,
               borderRadius: 4,
@@ -181,7 +207,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
               display: 'inline-flex',
               alignItems: 'center',
               gap: 3,
-              padding: '2px 6px',
+              padding: '2px 5px',
               backgroundColor: isEditable
                 ? 'rgba(48, 209, 88, 0.14)'
                 : 'rgba(255, 159, 10, 0.16)',
@@ -197,18 +223,20 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
               size={11}
               color={isEditable ? '#30D158' : '#FF9F0A'}
             />
-            <span>{isEditable ? 'WRITE' : 'READONLY'}</span>
+            {!isMobile && <span>{isEditable ? 'WRITE' : 'READONLY'}</span>}
           </span>
         </div>
       )}
 
       {/* fx Symbol */}
-      <MaterialIcon
-        name="functions"
-        size={15}
-        color={theme.isDark ? '#8E8E93' : '#AEAEB2'}
-        title="Formula / Value Bar"
-      />
+      {!isMobile && (
+        <MaterialIcon
+          name="functions"
+          size={15}
+          color={theme.isDark ? '#8E8E93' : '#AEAEB2'}
+          title="Formula / Value Bar"
+        />
+      )}
 
       {/* Interactive Formula / Value Input */}
       <input
@@ -238,6 +266,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
         }
         style={{
           flex: 1,
+          minWidth: isMobile ? 90 : 120,
           padding: '3px 8px',
           backgroundColor: theme.canvas.bg,
           color: theme.canvas.cellText,

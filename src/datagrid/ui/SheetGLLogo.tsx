@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 export interface SheetGLLogoProps {
   size?: number;
@@ -7,13 +7,19 @@ export interface SheetGLLogoProps {
   style?: React.CSSProperties;
 }
 
+export const SHEETGL_GRADIENT =
+  'linear-gradient(110deg, #c4b5fd 0%, #a855f7 30%, #818cf8 66%, #38bdf8 100%)';
+
 export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
   size = 22,
   glow = false,
   className,
   style,
 }) => {
+  const rawId = useId().replace(/:/g, '');
+  const p = `sgl_${rawId}`;
   const height = (size * 46) / 48;
+
   return (
     <div
       className={className}
@@ -25,7 +31,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
         width: size,
         height,
         filter: glow
-          ? 'drop-shadow(0 0 16px rgba(134, 59, 255, 0.6)) drop-shadow(0 0 30px rgba(71, 191, 255, 0.4))'
+          ? 'drop-shadow(0 0 18px rgba(134, 59, 255, 0.55)) drop-shadow(0 0 34px rgba(71, 191, 255, 0.35))'
           : 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15))',
         flexShrink: 0,
         ...style,
@@ -45,7 +51,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
           style={{ fill: '#863bff', fillOpacity: 1 }}
         />
         <mask
-          id="sheetgl-logo-mask"
+          id={`${p}_mask`}
           width="48"
           height="46"
           x="0"
@@ -59,8 +65,8 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
             style={{ fill: '#000', fillOpacity: 1 }}
           />
         </mask>
-        <g mask="url(#sheetgl-logo-mask)">
-          <g filter="url(#sgl-b)">
+        <g mask={`url(#${p}_mask)`}>
+          <g filter={`url(#${p}_b)`}>
             <ellipse
               cx="5.508"
               cy="14.704"
@@ -70,7 +76,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="matrix(.00324 1 1 -.00324 -4.47 31.516)"
             />
           </g>
-          <g filter="url(#sgl-c)">
+          <g filter={`url(#${p}_c)`}>
             <ellipse
               cx="10.399"
               cy="29.851"
@@ -80,7 +86,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="matrix(.00324 1 1 -.00324 -39.328 7.883)"
             />
           </g>
-          <g filter="url(#sgl-d)">
+          <g filter={`url(#${p}_d)`}>
             <ellipse
               cx="5.508"
               cy="30.487"
@@ -90,7 +96,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(89.814 -25.913 -14.639)scale(1 -1)"
             />
           </g>
-          <g filter="url(#sgl-e)">
+          <g filter={`url(#${p}_e)`}>
             <ellipse
               cx="5.508"
               cy="30.599"
@@ -100,7 +106,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(89.814 -32.644 -3.334)scale(1 -1)"
             />
           </g>
-          <g filter="url(#sgl-f)">
+          <g filter={`url(#${p}_f)`}>
             <ellipse
               cx="5.508"
               cy="30.599"
@@ -110,7 +116,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="matrix(.00324 1 1 -.00324 -34.34 30.47)"
             />
           </g>
-          <g filter="url(#sgl-g)">
+          <g filter={`url(#${p}_g)`}>
             <ellipse
               cx="14.072"
               cy="22.078"
@@ -120,7 +126,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(93.35 24.506 48.493)scale(-1 1)"
             />
           </g>
-          <g filter="url(#sgl-h)">
+          <g filter={`url(#${p}_h)`}>
             <ellipse
               cx="3.47"
               cy="21.501"
@@ -130,7 +136,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(89.009 28.708 47.59)scale(-1 1)"
             />
           </g>
-          <g filter="url(#sgl-i)">
+          <g filter={`url(#${p}_i)`}>
             <ellipse
               cx="3.47"
               cy="21.501"
@@ -140,7 +146,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(89.009 28.708 47.59)scale(-1 1)"
             />
           </g>
-          <g filter="url(#sgl-j)">
+          <g filter={`url(#${p}_j)`}>
             <ellipse
               cx=".387"
               cy="8.972"
@@ -150,7 +156,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(39.51 .387 8.972)"
             />
           </g>
-          <g filter="url(#sgl-k)">
+          <g filter={`url(#${p}_k)`}>
             <ellipse
               cx="47.523"
               cy="-6.092"
@@ -160,7 +166,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(37.892 47.523 -6.092)"
             />
           </g>
-          <g filter="url(#sgl-l)">
+          <g filter={`url(#${p}_l)`}>
             <ellipse
               cx="41.412"
               cy="6.333"
@@ -170,7 +176,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(37.892 41.412 6.333)"
             />
           </g>
-          <g filter="url(#sgl-m)">
+          <g filter={`url(#${p}_m)`}>
             <ellipse
               cx="-1.879"
               cy="38.332"
@@ -180,7 +186,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(37.892 -1.88 38.332)"
             />
           </g>
-          <g filter="url(#sgl-n)">
+          <g filter={`url(#${p}_n)`}>
             <ellipse
               cx="-1.879"
               cy="38.332"
@@ -190,7 +196,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(37.892 -1.88 38.332)"
             />
           </g>
-          <g filter="url(#sgl-o)">
+          <g filter={`url(#${p}_o)`}>
             <ellipse
               cx="35.651"
               cy="29.907"
@@ -200,7 +206,7 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
               transform="rotate(37.892 35.651 29.907)"
             />
           </g>
-          <g filter="url(#sgl-p)">
+          <g filter={`url(#${p}_p)`}>
             <ellipse
               cx="38.418"
               cy="32.4"
@@ -212,77 +218,77 @@ export const SheetGLLogo: React.FC<SheetGLLogoProps> = ({
           </g>
         </g>
         <defs>
-          <filter id="sgl-b" width="60.045" height="41.654" x="-19.77" y="16.149" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_b`} width="60.045" height="41.654" x="-19.77" y="16.149" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="7.659" />
           </filter>
-          <filter id="sgl-c" width="90.34" height="51.437" x="-54.613" y="-7.533" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_c`} width="90.34" height="51.437" x="-54.613" y="-7.533" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="7.659" />
           </filter>
-          <filter id="sgl-d" width="79.355" height="29.4" x="-49.64" y="2.03" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_d`} width="79.355" height="29.4" x="-49.64" y="2.03" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-e" width="79.579" height="29.4" x="-45.045" y="20.029" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_e`} width="79.579" height="29.4" x="-45.045" y="20.029" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-f" width="79.579" height="29.4" x="-43.513" y="21.178" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_f`} width="79.579" height="29.4" x="-43.513" y="21.178" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-g" width="74.749" height="58.852" x="15.756" y="-17.901" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_g`} width="74.749" height="58.852" x="15.756" y="-17.901" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="7.659" />
           </filter>
-          <filter id="sgl-h" width="61.377" height="25.362" x="23.548" y="2.284" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_h`} width="61.377" height="25.362" x="23.548" y="2.284" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-i" width="61.377" height="25.362" x="23.548" y="2.284" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_i`} width="61.377" height="25.362" x="23.548" y="2.284" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-j" width="56.045" height="63.649" x="-27.636" y="-22.853" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_j`} width="56.045" height="63.649" x="-27.636" y="-22.853" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-k" width="54.814" height="64.646" x="20.116" y="-38.415" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_k`} width="54.814" height="64.646" x="20.116" y="-38.415" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-l" width="33.541" height="35.313" x="24.641" y="-11.323" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_l`} width="33.541" height="35.313" x="24.641" y="-11.323" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-m" width="54.814" height="64.646" x="-29.286" y="6.009" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_m`} width="54.814" height="64.646" x="-29.286" y="6.009" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-n" width="54.814" height="64.646" x="-29.286" y="6.009" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_n`} width="54.814" height="64.646" x="-29.286" y="6.009" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-o" width="54.814" height="64.646" x="8.244" y="-2.416" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_o`} width="54.814" height="64.646" x="8.244" y="-2.416" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />
           </filter>
-          <filter id="sgl-p" width="39.409" height="43.623" x="18.713" y="10.588" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
+          <filter id={`${p}_p`} width="39.409" height="43.623" x="18.713" y="10.588" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
             <feGaussianBlur result="effect1_foregroundBlur" stdDeviation="4.596" />

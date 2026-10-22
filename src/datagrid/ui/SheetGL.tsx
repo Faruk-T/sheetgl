@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   ColumnDef,
+  ColumnGroupDef,
   ActiveOverlayState,
   GridPermissions,
   GridToolbarConfig,
   GridSummaryConfig,
+  RowSelectionMode,
   EditingStartEvent,
   CellValueChangingEvent,
   CellValueChangedEvent,
@@ -31,6 +33,8 @@ import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
 import { ContextMenuOverlay, ContextMenuState } from '../overlays/ContextMenuOverlay';
 import { SparklineModalOverlay, SparklineModalState } from '../overlays/SparklineModalOverlay';
+import { BatchChangesModal } from '../overlays/BatchChangesModal';
+import { DeleteConfirmProgressModal } from '../overlays/DeleteConfirmProgressModal';
 import { ToolBar } from './ToolBar';
 import { FormulaBar } from './FormulaBar';
 import { SummaryFooter, SelectionSummaryStats } from './SummaryFooter';
@@ -43,8 +47,14 @@ import { LocaleEngine, LocaleInput, IGridLocale } from '../i18n/LocaleEngine';
 export interface SheetGLProps {
   dataSource: any[] | IDataStore;
   columns: ColumnDef[];
+  /** Optional Banded Column Group definitions for multi-level header bands and group-wide theme-aware coloring */
+  columnGroups?: ColumnGroupDef[];
+  /** Height of the top Banded Column Group header row in pixels when column groups are active (default: 30) */
+  groupHeaderHeight?: number;
   theme?: ThemeInput;
+  onThemeChange?: (themeName: string) => void;
   locale?: LocaleInput;
+  onLocaleChange?: (localeCode: 'tr' | 'en', locale: IGridLocale) => void;
   rowHeight?: number;
   headerHeight?: number;
   initialSort?: SortDescriptor[];
@@ -63,6 +73,11 @@ export interface SheetGLProps {
   onSummaryConfigChange?: (config: GridSummaryConfig) => void;
   /** Whether to show the Excel Formula & Coordinate Bar below the toolbar (default: true) */
   showFormulaBar?: boolean;
+  /** Row selection mode: 'none' | 'single' (Single Choice) | 'multiple' (Multiple Choice with checkboxes) */
+  selectionMode?: RowSelectionMode;
+  onSelectionModeChange?: (mode: RowSelectionMode) => void;
+  selectedRowKeys?: any[];
+  onSelectionChanged?: (selectedRowKeys: any[], selectedRowsData: any[]) => void;
   onPermissionsChange?: (permissions: GridPermissions) => void;
   onCellChange?: (row: any, columnId: string, value: any) => void;
 
@@ -116,8 +131,12 @@ function compileColumnFilters(map: Record<string, ColumnFilterState>): FilterDes
 export const SheetGL: React.FC<SheetGLProps> = ({
   dataSource,
   columns: userColumns,
+  columnGroups = [],
+  groupHeaderHeight = 30,
   theme: userTheme = 'apple-dark',
+  onThemeChange,
   locale: userLocale,
+  onLocaleChange,
   rowHeight = 34,
   headerHeight = 38,
   initialSort = [],
@@ -129,6 +148,10 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   summaryRow: userSummaryRow,
   onSummaryConfigChange,
   showFormulaBar = true,
+  selectionMode: userSelectionMode = 'none',
+  onSelectionModeChange,
+  selectedRowKeys: userSelectedRowKeys,
+  onSelectionChanged,
   onPermissionsChange,
   onCellChange,
   onEditingStart,
@@ -332,23 +355,57 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     [onSummaryConfigChange]
   );
 
-  // 4. Core Engines
+  // 4. Core Engines & Row Selection State
   const [columns, setColumns] = useState<ColumnDef[]>(userColumns);
   useEffect(() => {
     setColumns(userColumns);
   }, [userColumns]);
 
+  const [rowSelectionMode, setRowSelectionMode] = useState<RowSelectionMode>(userSelectionMode);
+  useEffect(() => {
+    setRowSelectionMode(userSelectionMode);
+  }, [userSelectionMode]);
+
+  const [selectedRowKeysSet, setSelectedRowKeysSet] = useState<Set<any>>(
+    () => new Set(userSelectedRowKeys || [])
+  );
+  useEffect(() => {
+    if (userSelectedRowKeys) {
+      setSelectedRowKeysSet(new Set(userSelectedRowKeys));
+    }
+  }, [userSelectedRowKeys]);
+
+  const effectiveColumns = useMemo<ColumnDef[]>(() => {
+    if (rowSelectionMode === 'single' || rowSelectionMode === 'multiple') {
+      const selCol: ColumnDef = {
+        id: '__selection__',
+        title: '',
+        type: 'boolean',
+        width: 42,
+        pinned: 'left',
+        sortable: false,
+        filterable: false,
+        groupable: false,
+        readonly: true,
+      };
+      return [selCol, ...columns.filter((c) => c.id !== '__selection__')];
+    }
+    return columns;
+  }, [columns, rowSelectionMode]);
+
   const geometryRef = useRef<GeometryEngine>(
-    new GeometryEngine(userColumns, rowHeight, headerHeight)
+    new GeometryEngine(effectiveColumns, rowHeight, headerHeight, columnGroups, groupHeaderHeight)
   );
   const selectionRef = useRef<SelectionModel>(new SelectionModel());
   const historyRef = useRef<HistoryManager>(new HistoryManager(100));
 
   useEffect(() => {
     geometryRef.current.rowHeight = rowHeight;
-    geometryRef.current.headerHeight = headerHeight;
-    geometryRef.current.setColumns(columns);
-  }, [columns, rowHeight, headerHeight]);
+    geometryRef.current.setBaseHeaderHeight(headerHeight);
+    geometryRef.current.setColumnGroups(columnGroups, groupHeaderHeight);
+    geometryRef.current.setColumns(effectiveColumns);
+    requestRender();
+  }, [effectiveColumns, rowHeight, headerHeight, columnGroups, groupHeaderHeight]);
 
   // 5. UI State Management
   const [sortRules, setSortRules] = useState<SortDescriptor[]>(initialSort);
@@ -366,6 +423,12 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [sparklineModal, setSparklineModal] = useState<SparklineModalState | null>(null);
+  const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    rowKeys: any[];
+    sampleRows: Record<string, any>[];
+    singleRowIndex?: number;
+  } | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'info' | 'warning' | 'success' } | null>(null);
 
   // Hover & Drag States
@@ -443,6 +506,14 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     if (!canvasRef.current) return;
     requestAnimationFrame(() => {
       if (!canvasRef.current) return;
+      const surfaceW =
+        gridSurfaceRef.current?.clientWidth ||
+        containerRef.current?.clientWidth ||
+        canvasRef.current.clientWidth ||
+        0;
+      if (surfaceW > 0) {
+        geometryRef.current.setViewportWidth(surfaceW);
+      }
       CanvasRenderer.render({
         canvas: canvasRef.current,
         geometry: geometryRef.current,
@@ -460,6 +531,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         fillDragRange: fillDragState?.targetRange || null,
         loadingRowKeys: loadingRowKeysRef.current,
         permissions,
+        selectionMode: rowSelectionMode,
+        selectedRowKeys: selectedRowKeysSet,
       });
     });
   }, [
@@ -471,11 +544,13 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     activeFilterColumnIds,
     fillDragState,
     permissions,
+    rowSelectionMode,
+    selectedRowKeysSet,
   ]);
 
   useEffect(() => {
     requestRender();
-  }, [requestRender, resolvedTheme, currentLocale, storeVersion, columns, selectionVersion]);
+  }, [requestRender, resolvedTheme, currentLocale, storeVersion, effectiveColumns, selectionVersion, rowSelectionMode, selectedRowKeysSet]);
 
   // 6b. Resize Observer
   useEffect(() => {
@@ -1050,10 +1125,6 @@ export const SheetGL: React.FC<SheetGLProps> = ({
 
   const handleDeleteRow = useCallback(
     async (rowIndex?: number) => {
-      const targetIdx = rowIndex ?? selectionRef.current.activeCell.row;
-      const vRow = store.getViewRow(targetIdx);
-      if (!vRow || vRow.type !== 'data') return;
-
       if (
         permissions.mode === 'read' ||
         permissions.mode === 'readonly' ||
@@ -1068,41 +1139,130 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         return;
       }
 
+      // If multiple/single rows are checked via Selection Column and no explicit context-menu rowIndex was forced
+      if (selectedRowKeysSet.size > 0 && rowIndex === undefined) {
+        const keysToDelete = Array.from(selectedRowKeysSet);
+        const sampleRows: Record<string, any>[] = [];
+        const totalView = store.getRowCount();
+        for (let r = 0; r < totalView && sampleRows.length < 4; r++) {
+          const vr = store.getViewRow(r);
+          if (vr && vr.type === 'data' && selectedRowKeysSet.has(vr.data.id ?? r)) {
+            sampleRows.push(vr.data);
+          }
+        }
+        setDeleteConfirmModal({
+          rowKeys: keysToDelete,
+          sampleRows,
+        });
+        return;
+      }
+
+      const targetIdx = rowIndex ?? selectionRef.current.activeCell.row;
+      const vRow = store.getViewRow(targetIdx);
+      if (!vRow || vRow.type !== 'data') return;
+
       const rowKey = vRow.data.id ?? targetIdx;
       const snapshot = { ...vRow.data };
 
-      if (onRowRemoving) {
-        const evt: RowRemovingEvent = { key: rowKey, data: snapshot, cancel: false };
-        await onRowRemoving(evt);
-        if (evt.cancel) return;
+      // Open confirmation modal for single row deletion as well
+      setDeleteConfirmModal({
+        rowKeys: [rowKey],
+        sampleRows: [snapshot],
+        singleRowIndex: targetIdx,
+      });
+    },
+    [permissions, selectedRowKeysSet, store, currentLocale, showToast]
+  );
+
+  const executeConfirmedDelete = useCallback(
+    async (onProgress: (processed: number, total: number) => void) => {
+      if (!deleteConfirmModal) return;
+      const { rowKeys, sampleRows, singleRowIndex } = deleteConfirmModal;
+
+      if (rowKeys.length === 1 && singleRowIndex !== undefined && sampleRows[0]) {
+        const rowKey = rowKeys[0];
+        const snapshot = sampleRows[0];
+        if (onRowRemoving) {
+          const evt: RowRemovingEvent = { key: rowKey, data: snapshot, cancel: false };
+          await onRowRemoving(evt);
+          if (evt.cancel) {
+            setDeleteConfirmModal(null);
+            return;
+          }
+        }
+        onProgress(1, 1);
+        await store.deleteRow?.(rowKey);
+        if (selectedRowKeysSet.has(rowKey)) {
+          setSelectedRowKeysSet((prev) => {
+            const next = new Set(prev);
+            next.delete(rowKey);
+            return next;
+          });
+        }
+        historyRef.current.push({
+          description: 'Delete Row',
+          undo: () => {
+            store.restoreRow?.(snapshot, singleRowIndex);
+            setStoreVersion((v) => v + 1);
+          },
+          redo: () => {
+            store.deleteRow?.(rowKey);
+            setStoreVersion((v) => v + 1);
+          },
+        });
+        onRowRemoved?.({ key: rowKey, data: snapshot });
+        setDeleteConfirmModal(null);
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? `🗑️ Satır silindi (#${rowKey})`
+            : `🗑️ Row deleted (#${rowKey})`,
+          'info'
+        );
+        setStoreVersion((v) => v + 1);
+        requestRender();
+        return;
       }
 
-      await store.deleteRow?.(rowKey);
-      historyRef.current.push({
-        description: 'Delete Row',
-        undo: () => {
-          store.restoreRow?.(snapshot, targetIdx);
-          setStoreVersion((v) => v + 1);
-        },
-        redo: () => {
-          store.deleteRow?.(rowKey);
-          setStoreVersion((v) => v + 1);
-        },
+      // Multi-row / Bulk deletion with progress bar and O(N) chunked processing
+      if (store.deleteRowsBatch) {
+        await store.deleteRowsBatch(rowKeys, onProgress);
+      } else {
+        for (let i = 0; i < rowKeys.length; i++) {
+          await store.deleteRow?.(rowKeys[i]);
+          onProgress(i + 1, rowKeys.length);
+        }
+      }
+
+      setSelectedRowKeysSet(new Set());
+      onSelectionChanged?.([], []);
+      onRowRemoved?.({
+        key: `${rowKeys.length} rows`,
+        data: { deletedCount: rowKeys.length, sampleKeys: rowKeys.slice(0, 20) },
       });
-      onRowRemoved?.({ key: rowKey, data: snapshot });
+      setDeleteConfirmModal(null);
       showToast(
         currentLocale.code.startsWith('tr')
-          ? `🗑️ Satır silindi (#${rowKey})`
-          : `🗑️ Row deleted (#${rowKey})`,
+          ? `🗑️ Seçili ${rowKeys.length.toLocaleString('tr-TR')} satır silindi.`
+          : `🗑️ Deleted ${rowKeys.length.toLocaleString('en-US')} selected rows.`,
         'info'
       );
       setStoreVersion((v) => v + 1);
       requestRender();
     },
-    [store, permissions, onRowRemoving, onRowRemoved, currentLocale, showToast, requestRender]
+    [
+      deleteConfirmModal,
+      store,
+      selectedRowKeysSet,
+      onSelectionChanged,
+      onRowRemoving,
+      onRowRemoved,
+      currentLocale,
+      showToast,
+      requestRender,
+    ]
   );
 
-  const handleSaveBatch = useCallback(async () => {
+  const commitBatchSave = useCallback(async () => {
     const changes = store.getPendingChanges?.();
     if (!changes) return;
 
@@ -1129,6 +1289,27 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       requestRender();
     }
   }, [store, onSaving, onSaved, currentLocale, showToast, requestRender]);
+
+  const handleSaveBatch = useCallback(() => {
+    const fastCount = store.getPendingChangesCount?.();
+    if (fastCount !== undefined && fastCount > 1) {
+      setShowBatchModal(true);
+      return;
+    }
+    const changes = store.getPendingChanges?.();
+    if (!changes) return;
+    const totalOps =
+      (changes.inserted?.length || 0) +
+      (changes.updated?.length || 0) +
+      (changes.deleted?.length || 0);
+
+    // If there are multiple operations or any row deletions, open the Batch Changes Summary Modal first!
+    if (totalOps > 1 || (changes.deleted?.length || 0) > 0) {
+      setShowBatchModal(true);
+      return;
+    }
+    commitBatchSave();
+  }, [store, commitBatchSave]);
 
   const handleDiscardBatch = useCallback(() => {
     store.discardBatchChanges?.();
@@ -1851,10 +2032,47 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       return;
     }
 
-    // C. Header Click (Sort or Filter Funnel Button)
+    // C. Header Click (Select-All Checkbox, Sort, or Filter Funnel Button)
     if (y <= geom.headerHeight && x > geom.rowNumberWidth) {
       const headerHit = geom.hitTestHeader(x, y, sl);
       if (headerHit) {
+        if (headerHit.column.id === '__selection__' && rowSelectionMode === 'multiple') {
+          if (rowCount > 0 && selectedRowKeysSet.size >= rowCount) {
+            setSelectedRowKeysSet(new Set());
+            onSelectionChanged?.([], []);
+          } else {
+            const nextKeys = new Set<any>();
+            const nextData: any[] = [];
+            for (let r = 0; r < rowCount; r++) {
+              const vr = store.getViewRow(r);
+              if (vr && vr.type === 'data') {
+                const k = vr.data.id ?? r;
+                nextKeys.add(k);
+                nextData.push(vr.data);
+              }
+            }
+            setSelectedRowKeysSet(nextKeys);
+            onSelectionChanged?.(Array.from(nextKeys), nextData);
+          }
+          requestRender();
+          return;
+        }
+        if (
+          headerHit.isGroupHeaderHit &&
+          headerHit.groupColIndices &&
+          headerHit.groupColIndices.length > 0
+        ) {
+          if (rowCount > 0) {
+            const startCol = headerHit.groupColIndices[0];
+            const endCol = headerHit.groupColIndices[headerHit.groupColIndices.length - 1];
+            selectionRef.current.setActiveCell(0, startCol);
+            selectionRef.current.setRangeEnd(rowCount - 1, endCol);
+            setSelectedCellUI({ row: 0, col: startCol });
+            setSelectionVersion((v) => v + 1);
+            requestRender();
+          }
+          return;
+        }
         if (headerHit.isFilterIconHit && permissions.allowFiltering !== false) {
           setHeaderFilterState({
             column: headerHit.column,
@@ -1954,6 +2172,41 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     setSelectionVersion((v) => v + 1);
 
     const colDef = geom.columns[hit.col];
+
+    // Row Selection Column Click ('__selection__')
+    if (colDef.id === '__selection__' && vRow && vRow.type === 'data') {
+      setIsDraggingSelection(false);
+      const rKey = vRow.data.id ?? hit.row;
+      setSelectedRowKeysSet((prev) => {
+        const next = new Set(prev);
+        if (rowSelectionMode === 'single') {
+          if (next.has(rKey)) {
+            next.clear();
+          } else {
+            next.clear();
+            next.add(rKey);
+          }
+        } else {
+          if (next.has(rKey)) next.delete(rKey);
+          else next.add(rKey);
+        }
+        if (onSelectionChanged) {
+          const rowsData: any[] = [];
+          for (let r = 0; r < rowCount; r++) {
+            const vr = store.getViewRow(r);
+            if (vr && vr.type === 'data' && next.has(vr.data.id ?? r)) {
+              rowsData.push(vr.data);
+            }
+          }
+          onSelectionChanged(Array.from(next), rowsData);
+        }
+        return next;
+      });
+      requestRender();
+      containerRef.current?.focus();
+      return;
+    }
+
     const plugin = ColumnTypeRegistry.get(colDef.type);
 
     // Clicking the expand icon (or clicking a sparkline cell) opens the Detailed Trend Chart Modal
@@ -2125,6 +2378,131 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       column: geom.columns[hit.col],
       rowData: vRow.data,
     });
+  };
+
+  // ============================================================================
+  // MOBILE TOUCH GESTURES (DOUBLE-TAP TO EDIT & LONG-PRESS CONTEXT MENU)
+  // ============================================================================
+  const touchStateRef = useRef<{
+    startX: number;
+    startY: number;
+    moved: boolean;
+    longPressTimer: number | null;
+    lastTapTime: number;
+    lastTapRow: number;
+    lastTapCol: number;
+  }>({
+    startX: 0,
+    startY: 0,
+    moved: false,
+    longPressTimer: null,
+    lastTapTime: 0,
+    lastTapRow: -1,
+    lastTapCol: -1,
+  });
+
+  const handleSurfaceTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const surface = gridSurfaceRef.current;
+    if (!surface) return;
+
+    const rect = surface.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    if (touchStateRef.current.longPressTimer) {
+      window.clearTimeout(touchStateRef.current.longPressTimer);
+    }
+
+    touchStateRef.current.startX = touch.clientX;
+    touchStateRef.current.startY = touch.clientY;
+    touchStateRef.current.moved = false;
+
+    touchStateRef.current.longPressTimer = window.setTimeout(() => {
+      if (touchStateRef.current.moved) return;
+      const geom = geometryRef.current;
+      const sl = scrollPosRef.current.left;
+      const st = scrollPosRef.current.top;
+      const rowCount = store.getRowCount();
+      const hit = geom.hitTest(x, y, sl, st, rowCount);
+      if (hit) {
+        const vRow = store.getViewRow(hit.row);
+        if (vRow && vRow.type === 'data') {
+          setIsDraggingSelection(false);
+          selectionRef.current.setActiveCell(hit.row, hit.col);
+          setSelectedCellUI({ row: hit.row, col: hit.col });
+          setSelectionVersion((v) => v + 1);
+          requestRender();
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(15);
+          }
+          setContextMenu({
+            targetType: 'cell',
+            x,
+            y,
+            row: hit.row,
+            col: hit.col,
+            column: geom.columns[hit.col],
+            rowData: vRow.data,
+          });
+        }
+      }
+    }, 480);
+  };
+
+  const handleSurfaceTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const dx = Math.abs(touch.clientX - touchStateRef.current.startX);
+    const dy = Math.abs(touch.clientY - touchStateRef.current.startY);
+    if (dx > 8 || dy > 8) {
+      touchStateRef.current.moved = true;
+      if (touchStateRef.current.longPressTimer) {
+        window.clearTimeout(touchStateRef.current.longPressTimer);
+        touchStateRef.current.longPressTimer = null;
+      }
+      if (isDraggingSelection) {
+        setIsDraggingSelection(false);
+      }
+    }
+  };
+
+  const handleSurfaceTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStateRef.current.longPressTimer) {
+      window.clearTimeout(touchStateRef.current.longPressTimer);
+      touchStateRef.current.longPressTimer = null;
+    }
+    if (touchStateRef.current.moved || e.changedTouches.length !== 1) return;
+
+    const touch = e.changedTouches[0];
+    const surface = gridSurfaceRef.current;
+    if (!surface) return;
+
+    const rect = surface.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    const geom = geometryRef.current;
+    const sl = scrollPosRef.current.left;
+    const st = scrollPosRef.current.top;
+    const hit = geom.hitTest(x, y, sl, st, store.getRowCount());
+    if (!hit) return;
+
+    const now = Date.now();
+    if (
+      now - touchStateRef.current.lastTapTime < 340 &&
+      touchStateRef.current.lastTapRow === hit.row &&
+      touchStateRef.current.lastTapCol === hit.col
+    ) {
+      touchStateRef.current.lastTapTime = 0;
+      setIsDraggingSelection(false);
+      openEditorForCell(hit.row, hit.col);
+    } else {
+      touchStateRef.current.lastTapTime = now;
+      touchStateRef.current.lastTapRow = hit.row;
+      touchStateRef.current.lastTapCol = hit.col;
+    }
   };
 
   // ============================================================================
@@ -2526,11 +2904,13 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       canEditCell(activeViewRow.data, currentColumn, selectedCellUI.row, true)
   );
 
-  const pendingChanges = store.getPendingChanges?.();
+  const pendingChanges = showBatchModal ? store.getPendingChanges?.() : undefined;
   const pendingChangesCount =
-    (pendingChanges?.inserted?.length || 0) +
-    (pendingChanges?.updated?.length || 0) +
-    (pendingChanges?.deleted?.length || 0);
+    store.getPendingChangesCount !== undefined
+      ? store.getPendingChangesCount()
+      : (pendingChanges?.inserted?.length || 0) +
+        (pendingChanges?.updated?.length || 0) +
+        (pendingChanges?.deleted?.length || 0);
 
   const normRange = selectionRef.current.getNormalizedRange();
   const selectionSpan = {
@@ -2567,8 +2947,17 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         theme={resolvedTheme}
         locale={currentLocale}
         currentThemeName={typeof currentThemeName === 'string' ? currentThemeName : 'custom'}
-        onThemeChange={setCurrentThemeName}
-        onLocaleChange={(code) => setCurrentLocale(LocaleEngine.resolve(code))}
+        onThemeChange={(nextTheme) => {
+          setCurrentThemeName(nextTheme);
+          if (typeof nextTheme === 'string') {
+            onThemeChange?.(nextTheme);
+          }
+        }}
+        onLocaleChange={(code) => {
+          const resolved = LocaleEngine.resolve(code);
+          setCurrentLocale(resolved);
+          onLocaleChange?.(resolved.code.startsWith('tr') ? 'tr' : 'en', resolved);
+        }}
         searchKeyword={searchKeyword}
         onSearchChange={(k) => {
           setSearchKeyword(k);
@@ -2599,7 +2988,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         onPermissionsChange={handleUpdatePermissions}
         onAddRow={() => handleInsertRow(0)}
         onDuplicateRow={() => handleDuplicateRow(selectedCellUI.row)}
-        onDeleteRow={() => handleDeleteRow(selectedCellUI.row)}
+        onDeleteRow={() => handleDeleteRow()}
         canUndo={historyRef.current.canUndo()}
         canRedo={historyRef.current.canRedo()}
         onUndo={() => {
@@ -2615,6 +3004,20 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         pendingChangesCount={pendingChangesCount}
         onSaveBatch={handleSaveBatch}
         onDiscardBatch={handleDiscardBatch}
+        onInspectBatchChanges={() => setShowBatchModal(true)}
+        selectedRowCount={selectedRowKeysSet.size}
+        selectionMode={rowSelectionMode}
+        onSelectionModeChange={(m) => {
+          setRowSelectionMode(m);
+          if (m === 'none') {
+            setSelectedRowKeysSet(new Set());
+            onSelectionChanged?.([], []);
+          } else if (m === 'single' && selectedRowKeysSet.size > 1) {
+            const first = Array.from(selectedRowKeysSet)[0];
+            setSelectedRowKeysSet(new Set([first]));
+          }
+          onSelectionModeChange?.(m);
+        }}
         activeFilterCount={Object.keys(columnFilters).length}
         onClearAllFilters={handleClearAllFilters}
         toolbarConfig={toolbarConfig}
@@ -2673,6 +3076,9 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         onMouseMove={handleSurfaceMouseMove}
         onDoubleClick={handleSurfaceDoubleClick}
         onContextMenu={handleSurfaceContextMenu}
+        onTouchStart={handleSurfaceTouchStart}
+        onTouchMove={handleSurfaceTouchMove}
+        onTouchEnd={handleSurfaceTouchEnd}
         style={{
           position: 'relative',
           flex: 1,
@@ -3072,6 +3478,53 @@ export const SheetGL: React.FC<SheetGLProps> = ({
             locale={currentLocale}
             onClose={() => {
               setSparklineModal(null);
+              containerRef.current?.focus();
+            }}
+          />
+        )}
+
+        {/* 6c. BATCH CHANGES INSPECTION & CONFIRMATION MODAL */}
+        {showBatchModal && pendingChanges && (
+          <BatchChangesModal
+            changes={pendingChanges}
+            columns={columns}
+            theme={resolvedTheme}
+            locale={currentLocale}
+            onConfirmSave={commitBatchSave}
+            onDiscardAll={handleDiscardBatch}
+            onRevertDelete={(rk) => {
+              store.revertPendingDelete?.(rk);
+              setStoreVersion((v) => v + 1);
+              requestRender();
+            }}
+            onRevertUpdate={(rk, colId) => {
+              store.revertPendingUpdate?.(rk, colId);
+              setStoreVersion((v) => v + 1);
+              requestRender();
+            }}
+            onRevertInsert={(rk) => {
+              store.revertPendingInsert?.(rk);
+              setStoreVersion((v) => v + 1);
+              requestRender();
+            }}
+            onClose={() => {
+              setShowBatchModal(false);
+              containerRef.current?.focus();
+            }}
+          />
+        )}
+
+        {/* 6d. ROW DELETION CONFIRMATION & PROGRESS BAR MODAL */}
+        {deleteConfirmModal && (
+          <DeleteConfirmProgressModal
+            rowKeys={deleteConfirmModal.rowKeys}
+            sampleRows={deleteConfirmModal.sampleRows}
+            batchMode={Boolean(store.isBatchMode?.())}
+            theme={resolvedTheme}
+            locale={currentLocale}
+            onConfirm={executeConfirmedDelete}
+            onCancel={() => {
+              setDeleteConfirmModal(null);
               containerRef.current?.focus();
             }}
           />

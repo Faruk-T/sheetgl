@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ThemeInput } from '../theme/ThemeEngine';
 import {
@@ -7,6 +7,7 @@ import {
   GridSummaryConfig,
   GridToolbarConfig,
   GridToolbarCustomItem,
+  RowSelectionMode,
   ToolbarButtonDisplayMode,
 } from '../types/grid';
 import { SummaryType } from '../types/group';
@@ -43,6 +44,10 @@ export interface ToolBarProps {
   pendingChangesCount?: number;
   onSaveBatch?: () => void;
   onDiscardBatch?: () => void;
+  onInspectBatchChanges?: () => void;
+  selectedRowCount?: number;
+  selectionMode?: RowSelectionMode;
+  onSelectionModeChange?: (mode: RowSelectionMode) => void;
   activeFilterCount?: number;
   onClearAllFilters?: () => void;
   toolbarConfig?: GridToolbarConfig;
@@ -80,6 +85,10 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   pendingChangesCount = 0,
   onSaveBatch,
   onDiscardBatch,
+  onInspectBatchChanges,
+  selectedRowCount = 0,
+  selectionMode = 'none',
+  onSelectionModeChange,
   activeFilterCount = 0,
   onClearAllFilters,
   toolbarConfig,
@@ -89,13 +98,25 @@ export const ToolBar: React.FC<ToolBarProps> = ({
 }) => {
   const [showColSettings, setShowColSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'columns' | 'layout'>('columns');
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 740 : false
+  );
+  const [showMobileMore, setShowMobileMore] = useState<boolean>(false);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 740);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   const isTR = locale.code.startsWith('tr');
 
   if (toolbarConfig?.visible === false) {
     return null;
   }
 
-  const displayMode: ToolbarButtonDisplayMode = toolbarConfig?.buttonDisplayMode || 'icon-text';
+  const rawDisplayMode: ToolbarButtonDisplayMode = toolbarConfig?.buttonDisplayMode || 'icon-text';
+  const displayMode: ToolbarButtonDisplayMode = isMobile ? 'icon' : rawDisplayMode;
   const allowDisplayModeSwitch = toolbarConfig?.allowDisplayModeSwitch !== false;
 
   const showBrand = toolbarConfig?.showBrand !== false;
@@ -256,7 +277,32 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                 }}
               >
                 <SheetGLLogo size={20} />
-                <span>SheetGL</span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  <span style={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
+                    Sheet
+                    <span
+                      style={{
+                        background:
+                          'linear-gradient(110deg, #c4b5fd 0%, #a855f7 32%, #818cf8 68%, #38bdf8 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                      }}
+                    >
+                      GL
+                    </span>
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      color: theme.name === 'apple-dark' ? '#38BDF8' : '#7C3AED',
+                      opacity: 0.88,
+                    }}
+                  >
+                    v1.0.6
+                  </span>
+                </div>
               </div>
 
               <div
@@ -305,7 +351,15 @@ export const ToolBar: React.FC<ToolBarProps> = ({
               type="button"
               disabled={!canDel}
               onClick={onDeleteRow}
-              title={isTR ? 'Seçili Satırı Sil' : 'Delete Selected Row'}
+              title={
+                selectedRowCount > 0
+                  ? isTR
+                    ? `Seçili ${selectedRowCount} Satırı Sil`
+                    : `Delete ${selectedRowCount} Selected Rows`
+                  : isTR
+                  ? 'Seçili Satırı Sil'
+                  : 'Delete Selected Row'
+              }
               style={{
                 ...btnStyle(!canDel),
                 color: canDel ? '#FF453A' : theme.dom.toolbarText,
@@ -313,11 +367,40 @@ export const ToolBar: React.FC<ToolBarProps> = ({
             >
               {renderBtnContent(
                 'delete',
-                isTR ? 'Sil' : 'Delete',
+                selectedRowCount > 0
+                  ? isTR
+                    ? `Sil (${selectedRowCount})`
+                    : `Delete (${selectedRowCount})`
+                  : isTR
+                  ? 'Sil'
+                  : 'Delete',
                 undefined,
                 canDel ? '#FF453A' : undefined
               )}
             </button>
+          )}
+
+          {(!isMobile || showMobileMore) && toolbarConfig?.showSelectionModeSwitch && onSelectionModeChange && (
+            <select
+              value={selectionMode}
+              onChange={(e) => onSelectionModeChange(e.target.value as RowSelectionMode)}
+              title={isTR ? 'Satır Seçim Modu' : 'Row Selection Mode'}
+              style={{
+                padding: '4px 8px',
+                backgroundColor: theme.dom.inputBg,
+                color: theme.dom.inputText,
+                border: `1px solid ${theme.dom.inputBorder}`,
+                borderRadius: 6,
+                outline: 'none',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <option value="none">{isTR ? 'Seçim: Hücre (Yok)' : 'Select: Cell Only'}</option>
+              <option value="single">{isTR ? 'Seçim: Tekli (Single)' : 'Select: Single Row'}</option>
+              <option value="multiple">{isTR ? 'Seçim: Çoklu (Multiple)' : 'Select: Multiple Choice'}</option>
+            </select>
           )}
 
           {/* Undo / Redo */}
@@ -360,10 +443,10 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            gap: isMobile ? 6 : 8,
             flex: 1,
             maxWidth: 500,
-            minWidth: 200,
+            minWidth: isMobile ? 115 : 200,
           }}
         >
           {showSearch && (
@@ -427,7 +510,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
             </div>
           )}
 
-          {showGroupBy && (
+          {(!isMobile || showMobileMore) && showGroupBy && (
             <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
               <MaterialIcon
                 name="workspaces"
@@ -515,19 +598,33 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                 border: '1px solid rgba(48, 209, 88, 0.4)',
               }}
             >
-              <span
+              <button
+                type="button"
+                onClick={onInspectBatchChanges || onSaveBatch}
+                title={
+                  isTR
+                    ? 'Bekleyen değişiklikleri ve silinecek satırları incelemek için tıklayın'
+                    : 'Click to inspect pending changes and rows marked for deletion'
+                }
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
                   color: '#30D158',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 3,
+                  gap: 4,
+                  padding: '3px 7px',
+                  borderRadius: 5,
+                  border: '1px dashed rgba(48, 209, 88, 0.55)',
+                  backgroundColor: 'rgba(48, 209, 88, 0.1)',
+                  cursor: 'pointer',
                 }}
               >
                 <MaterialIcon name="pending_actions" size={14} color="#30D158" />
-                {pendingChangesCount} {isTR ? 'Değişiklik' : 'Unsaved'}
-              </span>
+                <span>
+                  {pendingChangesCount} {isTR ? 'Değişiklik' : 'Unsaved'}
+                </span>
+              </button>
               {onSaveBatch && (
                 <button
                   type="button"
@@ -587,7 +684,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           )}
 
           {/* Toolbar Button Display Mode Switcher (Icon | Icon+Text | Text) */}
-          {allowDisplayModeSwitch && onUpdateToolbarConfig && (
+          {(!isMobile || showMobileMore) && allowDisplayModeSwitch && onUpdateToolbarConfig && (
             <div
               title={
                 isTR
@@ -661,7 +758,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           )}
 
           {/* Permission Mode Switcher */}
-          {showPermissionsSwitch && onPermissionsChange && (
+          {(!isMobile || showMobileMore) && showPermissionsSwitch && onPermissionsChange && (
             <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
               <MaterialIcon
                 name={
@@ -744,11 +841,14 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                 <div
                   onMouseDown={(e) => e.stopPropagation()}
                   style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: 'calc(100% + 6px)',
-                    width: 400,
-                    maxHeight: 420,
+                    position: isMobile ? 'fixed' : 'absolute',
+                    left: isMobile ? 10 : undefined,
+                    right: isMobile ? 10 : 0,
+                    top: isMobile ? 64 : 'calc(100% + 6px)',
+                    width: isMobile ? 'auto' : 400,
+                    maxWidth: isMobile ? 420 : undefined,
+                    margin: isMobile ? '0 auto' : undefined,
+                    maxHeight: isMobile ? '78vh' : 420,
                     overflowY: 'auto',
                     backgroundColor: theme.dom.popoverBg,
                     color: theme.dom.popoverText,
@@ -757,7 +857,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                     boxShadow: theme.dom.popoverShadow,
                     backdropFilter: theme.dom.glassBackdrop,
                     padding: 12,
-                    zIndex: 200,
+                    zIndex: isMobile ? 600 : 200,
                   }}
                 >
                   {/* Header + Tabs */}
@@ -1255,7 +1355,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
             </div>
           )}
 
-          {showLocaleSwitch && onLocaleChange && (
+          {(!isMobile || showMobileMore) && showLocaleSwitch && onLocaleChange && (
             <select
               value={locale.code}
               onChange={(e) => onLocaleChange(e.target.value)}
@@ -1276,7 +1376,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
             </select>
           )}
 
-          {showThemeSwitch && (
+          {(!isMobile || showMobileMore) && showThemeSwitch && (
             <select
               value={currentThemeName}
               onChange={(e) => onThemeChange(e.target.value as ThemeInput)}
@@ -1301,7 +1401,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
 
           {rightCustomItems.map(renderCustomItem)}
 
-          {showExportCsv && permissions?.allowExport !== false && (
+          {(!isMobile || showMobileMore) && showExportCsv && permissions?.allowExport !== false && (
             <button
               type="button"
               onClick={onExportCsv}
@@ -1309,6 +1409,21 @@ export const ToolBar: React.FC<ToolBarProps> = ({
               style={btnStyle(false, true)}
             >
               {renderBtnContent('download', locale.exportCsv, undefined, '#FFFFFF')}
+            </button>
+          )}
+
+          {isMobile && (
+            <button
+              type="button"
+              onClick={() => setShowMobileMore((v) => !v)}
+              title={isTR ? 'Diğer Araçları Göster/Gizle' : 'Toggle Extra Toolbar Controls'}
+              style={btnStyle(false, showMobileMore, 'icon')}
+            >
+              <MaterialIcon
+                name={showMobileMore ? 'expand_less' : 'more_horiz'}
+                size={16}
+                color={showMobileMore ? '#FFFFFF' : undefined}
+              />
             </button>
           )}
         </div>
