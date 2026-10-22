@@ -1,8 +1,19 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { SheetGL, ColumnDef, GridEventLogEntry, LocaleEngine } from './datagrid';
+import { SheetGL, ColumnDef, ColumnGroupDef, GridEventLogEntry, LocaleEngine } from './datagrid';
 import { DocsPortal } from './DocsPortal';
 import { LandingPage } from './LandingPage';
 import { AppView, RouteState, parseLocationPath, buildRoutePath, syncSeoMeta } from './router';
+import {
+  DatasetFillMode,
+  DEFAULT_STUDIO_WIZARD_STATE,
+  StudioWizardState,
+  StudioWizardTab,
+} from './studio/types';
+import { StudioWizardDrawer } from './studio/StudioWizardDrawer';
+import {
+  CustomColumnDefinitionMeta,
+  generateCustomColumnSampleValue,
+} from './studio/CustomColumnBuilder';
 
 const STATUS_OPTIONS = [
   {
@@ -173,7 +184,10 @@ const SECTOR_BENCHMARKS: Record<string, { quota: number; trend: number[] }> = {
   'clean energy': { quota: 79, trend: [22, 38, 44, 59, 67, 75, 84] },
 };
 
-function generateDemoData(count: number = 10000) {
+function generateDemoData(count: number = 10000, fillMode: DatasetFillMode = 'populated') {
+  if (count <= 0 || fillMode === 'empty') {
+    return [];
+  }
   const cities = [
     'New York',
     'San Francisco',
@@ -223,31 +237,33 @@ function generateDemoData(count: number = 10000) {
   const tiers = ['Enterprise', 'Strategic', 'Growth', 'Core'];
   const slas = ['99.99%', '99.95%', '99.90%'];
 
+  const isSparse = fillMode === 'sparse';
+
   const rows: any[] = [];
   for (let i = 1; i <= count; i++) {
-    const city = cities[i % cities.length];
-    const category = categories[i % categories.length];
+    const city = isSparse && i % 3 === 0 ? null : cities[i % cities.length];
+    const category = isSparse && i % 4 === 0 ? null : categories[i % categories.length];
     const status = STATUS_OPTIONS[i % STATUS_OPTIONS.length];
-    const company = companies[i % companies.length];
+    const company = isSparse && i % 7 === 0 ? '' : companies[i % companies.length];
     const manager = MANAGER_LOOKUP_OPTIONS[i % MANAGER_LOOKUP_OPTIONS.length];
     const balance = Math.round((Math.sin(i) * 50000 + 65000) * 100) / 100;
-    const taxRate = REGION_POLICIES[city.toLowerCase()]?.taxRate ?? 20;
+    const taxRate = city ? (REGION_POLICIES[city.toLowerCase()]?.taxRate ?? 20) : 20;
     const netBalance = Math.round(balance * (1 - taxRate / 100) * 100) / 100;
-    const yoyGrowth = Math.round(Math.cos(i * 1.3) * 240) / 10;
+    const yoyGrowth = isSparse && i % 5 === 0 ? null : Math.round(Math.cos(i * 1.3) * 240) / 10;
     const progress = (i * 7) % 101;
     const rating = (i % 5) + 1;
     const isApproved = i % 3 === 0;
-    const tags = [...tagCombos[i % tagCombos.length]];
-    const cutoffTime = cutoffTimes[i % cutoffTimes.length];
-    const slug = company.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 12);
+    const tags = isSparse && i % 3 === 1 ? [] : [...tagCombos[i % tagCombos.length]];
+    const cutoffTime = isSparse && i % 4 === 1 ? null : cutoffTimes[i % cutoffTimes.length];
+    const slug = (company || 'enterprise').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 12);
     const metadata = {
       tier: tiers[i % tiers.length],
       sla: slas[i % slas.length],
       costCenter: `CC-${200 + (i % 40)}`,
     };
-    const email = `finance@${slug}.io`;
-    const website = `https://${slug}.io`;
-    const phone = `+1 (${210 + (i % 700)}) ${300 + (i % 600)}-${1000 + (i % 8999)}`;
+    const email = isSparse && i % 3 === 2 ? '' : `finance@${slug}.io`;
+    const website = isSparse && i % 4 === 2 ? '' : `https://${slug}.io`;
+    const phone = isSparse && i % 5 === 1 ? '' : `+1 (${210 + (i % 700)}) ${300 + (i % 600)}-${1000 + (i % 8999)}`;
     const tagColor = brandColors[i % brandColors.length];
 
     const sparkline = [
@@ -270,7 +286,7 @@ function generateDemoData(count: number = 10000) {
       id: i,
       code: `ACC-${100000 + i}`,
       company,
-      managerId: manager.value,
+      managerId: isSparse && i % 4 === 3 ? null : manager.value,
       metadata,
       city,
       category,
@@ -323,23 +339,59 @@ export function App() {
   useEffect(() => {
     syncSeoMeta(route, lang);
   }, [route, lang]);
-  const [showEventDrawer, setShowEventDrawer] = useState<boolean>(false);
-  const [lockRejectedRows, setLockRejectedRows] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const [wizardOpen, setWizardOpen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
+  const [wizardTab, setWizardTab] = useState<StudioWizardTab>('data');
+  const [wizardState, setWizardState] = useState<StudioWizardState>(DEFAULT_STUDIO_WIZARD_STATE);
+  const [customColumns, setCustomColumns] = useState<CustomColumnDefinitionMeta[]>([]);
+  const [lastSavePayload, setLastSavePayload] = useState<any>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<(string | number)[]>([]);
   const [selectedRecordModal, setSelectedRecordModal] = useState<Record<string, any> | null>(null);
   const [eventLogs, setEventLogs] = useState<GridEventLogEntry[]>([
     {
       id: 'init-1',
       timestamp: new Date().toLocaleTimeString(),
       eventName: 'onInitialized',
-      summary: 'SheetGL v2.0 Enterprise ready (10,000 rows, Cascading Backend Triggers active)',
+      summary: 'SheetGL v1.0.6 Enterprise Studio ready (Wizard & Multi-Row Selection active)',
       status: 'info',
     },
   ]);
 
-  const [data] = useState(() => generateDemoData(10000));
+  const [landingData] = useState(() => generateDemoData(10000, 'populated'));
+  const studioData = useMemo(() => {
+    const baseRows = generateDemoData(wizardState.rowCount, wizardState.datasetFillMode);
+    if (customColumns.length === 0 || baseRows.length === 0) return baseRows;
+    for (let i = 0; i < baseRows.length; i++) {
+      const row = baseRows[i];
+      for (const meta of customColumns) {
+        const colId = meta.columnDef.id;
+        if (row[colId] === undefined) {
+          row[colId] =
+            meta.autoFill === 'sample'
+              ? generateCustomColumnSampleValue(meta.columnDef, row.id ?? i + 1)
+              : null;
+        }
+      }
+    }
+    return baseRows;
+  }, [wizardState.rowCount, wizardState.datasetFillMode, customColumns]);
 
   const pushEventLog = useCallback(
-    (eventName: string, summary: string, status: 'info' | 'success' | 'warning' | 'async' = 'info') => {
+    (
+      eventName: string,
+      summary: string,
+      status: 'info' | 'success' | 'warning' | 'async' = 'info',
+      payload?: any
+    ) => {
       setEventLogs((prev) => [
         {
           id: `${Date.now()}_${Math.random()}`,
@@ -347,6 +399,7 @@ export function App() {
           eventName,
           summary,
           status,
+          payload,
         },
         ...prev.slice(0, 59),
       ]);
@@ -776,6 +829,128 @@ export function App() {
     [lang, pushEventLog]
   );
 
+  const allStudioColumns = useMemo<ColumnDef[]>(() => {
+    const customDefs = customColumns.map((m) =>
+      m.columnDef.type === 'action' && !m.columnDef.onActionClick
+        ? {
+            ...m.columnDef,
+            onActionClick: (row: any) => setSelectedRecordModal(row),
+          }
+        : m.columnDef
+    );
+    return [...columns, ...customDefs];
+  }, [columns, customColumns]);
+
+  const activeStudioColumns = useMemo<ColumnDef[]>(() => {
+    const enabledSet = new Set(wizardState.enabledColumnIds);
+    const filtered = allStudioColumns.filter((col) => enabledSet.has(col.id));
+    const baseList = filtered.length > 0 ? filtered : allStudioColumns.slice(0, 3);
+    const overrides = wizardState.columnColorOverrides || {};
+    return baseList.map((col) => {
+      const ov = overrides[col.id];
+      if (!ov || (!ov.headerColor && !ov.columnColor)) return col;
+      return {
+        ...col,
+        headerColor: ov.headerColor || col.headerColor,
+        columnColor: ov.columnColor || col.columnColor,
+      };
+    });
+  }, [allStudioColumns, wizardState.enabledColumnIds, wizardState.columnColorOverrides]);
+
+  const studioColumnGroups = useMemo<ColumnGroupDef[]>(() => {
+    if (!wizardState.enableColumnGroups) return [];
+    const gm = wizardState.groupColorMap || {};
+    const inherit = wizardState.inheritGroupColumnColors;
+    const isTR = lang === 'tr';
+    return [
+      {
+        id: 'identity',
+        title: isTR ? 'KİMLİK & HESAP' : 'ACCOUNT IDENTITY',
+        columnIds: ['id', 'code', 'company'],
+        color: gm.identity || 'indigo',
+        inheritColumnColors: inherit,
+      },
+      {
+        id: 'organization',
+        title: isTR ? 'ORGANİZASYON & BÖLGE' : 'ORGANIZATION & REGION',
+        columnIds: ['managerId', 'metadata', 'city', 'category', 'status', 'tags'],
+        color: gm.organization || 'blue',
+        inheritColumnColors: inherit,
+      },
+      {
+        id: 'financials',
+        title: isTR ? 'FİNANSAL METRİKLER' : 'FINANCIAL METRICS',
+        columnIds: ['balance', 'taxRate', 'netBalance', 'yoyGrowth', 'isApproved'],
+        color: gm.financials || 'emerald',
+        inheritColumnColors: inherit,
+      },
+      {
+        id: 'performance',
+        title: isTR ? 'PERFORMANS & KPI' : 'PERFORMANCE & KPI',
+        columnIds: ['rating', 'progress', 'sparkline'],
+        color: gm.performance || 'violet',
+        inheritColumnColors: inherit,
+      },
+      {
+        id: 'timeline',
+        title: isTR ? 'ZAMAN & DENETİM' : 'TIMELINE & AUDIT',
+        columnIds: ['date', 'lastAuditAt', 'cutoffTime'],
+        color: gm.timeline || 'amber',
+        inheritColumnColors: inherit,
+      },
+      {
+        id: 'contact',
+        title: isTR ? 'İLETİŞİM & AKSİYON' : 'CONTACT & ACTIONS',
+        columnIds: ['email', 'website', 'phone', 'tagColor', 'actions'],
+        color: gm.contact || 'cyan',
+        inheritColumnColors: inherit,
+      },
+    ];
+  }, [
+    wizardState.enableColumnGroups,
+    wizardState.groupColorMap,
+    wizardState.inheritGroupColumnColors,
+    lang,
+  ]);
+
+  const handleAddCustomColumn = useCallback(
+    (meta: CustomColumnDefinitionMeta) => {
+      setCustomColumns((prev) => [...prev, meta]);
+      setWizardState((prev) => ({
+        ...prev,
+        enabledColumnIds: prev.enabledColumnIds.includes(meta.columnDef.id)
+          ? prev.enabledColumnIds
+          : [...prev.enabledColumnIds, meta.columnDef.id],
+      }));
+      pushEventLog(
+        'onCustomColumnAdded',
+        `Added custom column "${meta.columnDef.title}" (${meta.columnDef.id} • ${meta.columnDef.type})`,
+        'success',
+        {
+          action: 'ADD_CUSTOM_COLUMN',
+          autoFill: meta.autoFill,
+          columnSchema: meta.columnDef,
+        }
+      );
+    },
+    [pushEventLog]
+  );
+
+  const handleRemoveCustomColumn = useCallback(
+    (colId: string) => {
+      setCustomColumns((prev) => prev.filter((c) => c.columnDef.id !== colId));
+      setWizardState((prev) => ({
+        ...prev,
+        enabledColumnIds: prev.enabledColumnIds.filter((id) => id !== colId),
+      }));
+      pushEventLog('onCustomColumnRemoved', `Removed custom column "${colId}"`, 'warning', {
+        action: 'REMOVE_CUSTOM_COLUMN',
+        columnId: colId,
+      });
+    },
+    [pushEventLog]
+  );
+
   const isTR = lang === 'tr';
 
   return (
@@ -793,155 +968,192 @@ export function App() {
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif",
       }}
     >
-      {/* FLOATING STUDIO NAVIGATION PILL (Only visible in full-screen Studio mode) */}
+      {/* RESPONSIVE STUDIO TOP HEADER BAR (Only visible in full-screen Studio mode) */}
       {activeView === 'studio' && (
-        <aside
+        <header
           style={{
-            position: 'absolute',
-            top: 10,
-            right: 14,
-            zIndex: 350,
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
             gap: 8,
-            padding: '5px 12px',
-            borderRadius: 999,
-            backgroundColor: isDark ? 'rgba(15, 11, 28, 0.88)' : 'rgba(255, 255, 255, 0.94)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: `1px solid ${isDark ? 'rgba(134, 59, 255, 0.3)' : 'rgba(134, 59, 255, 0.2)'}`,
-            boxShadow: isDark
-              ? '0 12px 32px rgba(0, 0, 0, 0.6), 0 0 16px rgba(134, 59, 255, 0.2)'
-              : '0 8px 24px rgba(134, 59, 255, 0.15)',
+            padding: isMobile ? '6px 10px' : '6px 14px',
+            backgroundColor: isDark ? '#0D111A' : '#FFFFFF',
+            borderBottom: `1px solid ${isDark ? 'rgba(134, 59, 255, 0.25)' : 'rgba(134, 59, 255, 0.16)'}`,
+            flexShrink: 0,
+            overflowX: 'auto',
             userSelect: 'none',
+            zIndex: 250,
           }}
         >
-          {/* Back to Landing Page */}
-          <button
-            type="button"
-            onClick={() => navigate('landing')}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 7,
-              border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-              backgroundColor: isDark ? 'rgba(134, 59, 255, 0.15)' : 'rgba(134, 59, 255, 0.08)',
-              color: isDark ? '#E9D5FF' : '#7E14FF',
-              fontWeight: 750,
-              fontSize: 11.5,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <span>🏠 {isTR ? 'Ana Sayfa (/)' : 'Home (/)'}</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {/* Back to Landing Page */}
+            <button
+              type="button"
+              onClick={() => navigate('landing')}
+              style={{
+                padding: isMobile ? '4px 8px' : '4px 10px',
+                borderRadius: 7,
+                border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                backgroundColor: isDark ? 'rgba(134, 59, 255, 0.15)' : 'rgba(134, 59, 255, 0.08)',
+                color: isDark ? '#E9D5FF' : '#7E14FF',
+                fontWeight: 750,
+                fontSize: 11.5,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>🏠 {isMobile ? (isTR ? 'Ana Sayfa' : 'Home') : isTR ? 'Ana Sayfa (/)' : 'Home (/)'}</span>
+            </button>
 
-          {/* Go to Documentation */}
-          <button
-            type="button"
-            onClick={() => navigate('docs')}
-            style={{
-              padding: '4px 9px',
-              borderRadius: 7,
-              border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-              backgroundColor: 'transparent',
-              color: isDark ? '#CBD5E1' : '#334155',
-              fontWeight: 650,
-              fontSize: 11.5,
-              cursor: 'pointer',
-            }}
-          >
-            📚 {isTR ? 'Doküman (/documentation)' : 'Docs (/documentation)'}
-          </button>
+            {/* Go to Documentation */}
+            <button
+              type="button"
+              onClick={() => navigate('docs')}
+              style={{
+                padding: isMobile ? '4px 8px' : '4px 9px',
+                borderRadius: 7,
+                border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                backgroundColor: 'transparent',
+                color: isDark ? '#CBD5E1' : '#334155',
+                fontWeight: 650,
+                fontSize: 11.5,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              📚 {isTR ? 'Doküman' : 'Docs'}
+            </button>
+          </div>
 
-          <div style={{ width: 1, height: 16, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {/* Quick Studio Wizard & Settings Drawer Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (!wizardOpen) {
+                  setWizardOpen(true);
+                } else if (wizardTab === 'diagnostics') {
+                  setWizardTab('data');
+                } else {
+                  setWizardOpen(false);
+                }
+              }}
+              style={{
+                padding: isMobile ? '4px 8px' : '4px 10px',
+                borderRadius: 7,
+                border: `1px solid ${wizardOpen && wizardTab !== 'diagnostics' ? '#8B5CF6' : isDark ? '#334155' : '#CBD5E1'}`,
+                backgroundColor:
+                  wizardOpen && wizardTab !== 'diagnostics'
+                    ? isDark
+                      ? 'rgba(139, 92, 246, 0.22)'
+                      : 'rgba(139, 92, 246, 0.12)'
+                    : 'transparent',
+                color:
+                  wizardOpen && wizardTab !== 'diagnostics'
+                    ? isDark
+                      ? '#DDD6FE'
+                      : '#6D28D9'
+                    : isDark
+                    ? '#E2E8F0'
+                    : '#1E293B',
+                fontSize: 11.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>🪄</span>
+              <span>
+                {isMobile
+                  ? isTR
+                    ? `Sihirbaz (${activeStudioColumns.length})`
+                    : `Wizard (${activeStudioColumns.length})`
+                  : isTR
+                  ? `Sihirbaz (${wizardState.rowCount.toLocaleString()} Satır · ${activeStudioColumns.length} Sütun)`
+                  : `Wizard (${wizardState.rowCount.toLocaleString()} Rows · ${activeStudioColumns.length} Cols)`}
+              </span>
+            </button>
 
-          {/* Lock Cancelled Rows Rule */}
-          <label
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '2px 6px',
-              fontSize: 11,
-              color: lockRejectedRows ? '#F59E0B' : isDark ? '#94A3B8' : '#64748B',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-            title={
-              isTR
-                ? 'Aktif edildiğinde Durumu "Cancelled" olan satırlar kilitlenir.'
-                : 'When checked, rows with Status = Cancelled are locked.'
-            }
-          >
-            <input
-              type="checkbox"
-              checked={lockRejectedRows}
-              onChange={(e) => setLockRejectedRows(e.target.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            <span>{isTR ? 'İptalleri Kilitle' : 'Lock Cancelled'}</span>
-          </label>
+            {/* Diagnostics & Event Console Quick Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (wizardOpen && wizardTab === 'diagnostics') {
+                  setWizardOpen(false);
+                } else {
+                  setWizardTab('diagnostics');
+                  setWizardOpen(true);
+                }
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: 6,
+                border: `1px solid ${wizardOpen && wizardTab === 'diagnostics' ? '#38BDF8' : isDark ? '#334155' : '#CBD5E1'}`,
+                backgroundColor:
+                  wizardOpen && wizardTab === 'diagnostics'
+                    ? isDark
+                      ? 'rgba(56, 189, 248, 0.18)'
+                      : 'rgba(2, 132, 199, 0.1)'
+                    : 'transparent',
+                color:
+                  wizardOpen && wizardTab === 'diagnostics'
+                    ? '#38BDF8'
+                    : isDark
+                    ? '#E2E8F0'
+                    : '#1E293B',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              title={isTR ? 'Canlı FPS, Bellek ve Olay Konsolu' : 'Live FPS, Memory & Event Console'}
+            >
+              ⚡ {isMobile ? `(${eventLogs.length})` : `${isTR ? 'Diagnostik' : 'Diagnostics'} (${eventLogs.length})`}
+            </button>
 
-          {/* Event Trigger Drawer Toggle */}
-          <button
-            type="button"
-            onClick={() => setShowEventDrawer((v) => !v)}
-            style={{
-              padding: '4px 8px',
-              borderRadius: 6,
-              border: `1px solid ${showEventDrawer ? '#38BDF8' : isDark ? '#334155' : '#CBD5E1'}`,
-              backgroundColor: showEventDrawer
-                ? isDark
-                  ? 'rgba(56, 189, 248, 0.16)'
-                  : 'rgba(2, 132, 199, 0.1)'
-                : 'transparent',
-              color: showEventDrawer ? '#38BDF8' : isDark ? '#E2E8F0' : '#1E293B',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            ⚡ {eventLogs.length}
-          </button>
+            {/* Language Switcher */}
+            <button
+              type="button"
+              onClick={() => setLang((l) => (l === 'tr' ? 'en' : 'tr'))}
+              style={{
+                padding: '4px 8px',
+                borderRadius: 6,
+                border: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
+                backgroundColor: 'transparent',
+                color: isDark ? '#F9FAFB' : '#0F172A',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {lang.toUpperCase()}
+            </button>
 
-          {/* Language Switcher */}
-          <button
-            type="button"
-            onClick={() => setLang((l) => (l === 'tr' ? 'en' : 'tr'))}
-            style={{
-              padding: '4px 8px',
-              borderRadius: 6,
-              border: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
-              backgroundColor: 'transparent',
-              color: isDark ? '#F9FAFB' : '#0F172A',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            {lang.toUpperCase()}
-          </button>
-
-          {/* Dark / Light Mode Switcher */}
-          <button
-            type="button"
-            onClick={() => setIsDark((d) => !d)}
-            style={{
-              padding: '4px 8px',
-              borderRadius: 6,
-              border: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
-              backgroundColor: 'transparent',
-              color: isDark ? '#FBBF24' : '#0F172A',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            {isDark ? '🌙' : '☀️'}
-          </button>
-        </aside>
+            {/* Dark / Light Mode Switcher */}
+            <button
+              type="button"
+              onClick={() => setIsDark((d) => !d)}
+              style={{
+                padding: '4px 8px',
+                borderRadius: 6,
+                border: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
+                backgroundColor: 'transparent',
+                color: isDark ? '#FBBF24' : '#0F172A',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {isDark ? '🌙' : '☀️'}
+            </button>
+          </div>
+        </header>
       )}
 
       {/* MAIN VIEWPORT CONTENT */}
@@ -950,13 +1162,30 @@ export function App() {
           <>
             <div style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
               <SheetGL
-                dataSource={data}
-                columns={columns}
+                key={`studio-${wizardState.rowCount}-${wizardState.datasetFillMode}`}
+                dataSource={studioData}
+                columns={activeStudioColumns}
+                columnGroups={studioColumnGroups}
                 theme={isDark ? 'apple-dark' : 'apple-light'}
+                onThemeChange={(nextTheme) => setIsDark(nextTheme.includes('dark'))}
                 locale={lang}
-                batchEditMode={true}
+                onLocaleChange={(nextLang) => setLang(nextLang)}
+                batchEditMode={wizardState.batchEditMode}
+                selectionMode={wizardState.selectionMode}
+                onSelectionModeChange={(nextMode) =>
+                  setWizardState((prev) => ({ ...prev, selectionMode: nextMode }))
+                }
+                selectedRowKeys={selectedRowKeys}
+                onSelectionChanged={(keys) => setSelectedRowKeys(keys)}
+                toolbar={wizardState.toolbarConfig}
+                showFormulaBar={wizardState.showFormulaBar}
+                summaryRow={wizardState.showSummaryRow}
                 onEditingStart={(e) => {
-                  if (lockRejectedRows && e.row.status === 'rejected' && e.column.id !== 'status') {
+                  if (
+                    wizardState.lockRejectedRows &&
+                    e.row.status === 'rejected' &&
+                    e.column.id !== 'status'
+                  ) {
                     e.cancel = true;
                     pushEventLog(
                       'onEditingStart (Canceled)',
@@ -988,138 +1217,139 @@ export function App() {
                   pushEventLog(
                     'onCellValueChanged',
                     `Row #${e.rowKey} [${e.column.id}]: "${e.oldValue}" → "${e.newValue}"`,
-                    'success'
+                    'success',
+                    {
+                      rowKey: e.rowKey,
+                      columnId: e.column.id,
+                      oldValue: e.oldValue,
+                      newValue: e.newValue,
+                    }
                   );
                 }}
                 onRowInserted={(e) => {
-                  pushEventLog('onRowInserted', `New row created with ID #${e.key}`, 'success');
+                  pushEventLog(
+                    'onRowInserted',
+                    `New row created with ID #${e.key}`,
+                    'success',
+                    {
+                      key: e.key,
+                      data: e.data,
+                    }
+                  );
                 }}
                 onRowRemoved={(e) => {
-                  pushEventLog('onRowRemoved', `Row #${e.key} removed`, 'warning');
+                  pushEventLog(
+                    'onRowRemoved',
+                    `Row #${e.key} removed`,
+                    'warning',
+                    {
+                      key: e.key,
+                      deletedRowData: e.data,
+                    }
+                  );
                 }}
                 onSaving={(e) => {
                   const total =
                     (e.changes.inserted?.length || 0) +
                     (e.changes.updated?.length || 0) +
                     (e.changes.deleted?.length || 0);
+                  const batchPayload = {
+                    endpoint: 'POST /api/v1/sheetgl/batch-commit',
+                    timestamp: new Date().toISOString(),
+                    summary: {
+                      totalOperations: total,
+                      insertedCount: e.changes.inserted?.length || 0,
+                      updatedCount: e.changes.updated?.length || 0,
+                      deletedCount: e.changes.deleted?.length || 0,
+                    },
+                    payload: {
+                      inserted: (e.changes.inserted || []).slice(0, 100),
+                      updated: (e.changes.updated || []).slice(0, 100).map((u) => ({
+                        key: u.key,
+                        values: u.values,
+                        oldValues: u.oldValues,
+                      })),
+                      deleted: (e.changes.deleted || []).slice(0, 200),
+                      deletedRowsSnapshot: (e.changes.deletedRowsData || []).slice(0, 40),
+                      ...(total > 200
+                        ? {
+                            _truncatedPreview: `Showing sample slice of ${total.toLocaleString()} total operations for fast UI rendering`,
+                          }
+                        : {}),
+                    },
+                  };
+                  setLastSavePayload(batchPayload);
                   pushEventLog(
                     'onSaving (Batch Request)',
-                    `Sending batch payload (${total} changes) to backend...`,
-                    'async'
+                    `Sending batch JSON payload (${total.toLocaleString()} changes) to backend...`,
+                    'async',
+                    batchPayload
                   );
                 }}
                 onSaved={(e) => {
+                  const total =
+                    (e.changes.inserted?.length || 0) +
+                    (e.changes.updated?.length || 0) +
+                    (e.changes.deleted?.length || 0);
+                  const committedPayload = {
+                    endpoint: 'POST /api/v1/sheetgl/batch-commit',
+                    status: '200 OK (Committed)',
+                    committedAt: new Date().toISOString(),
+                    summary: {
+                      totalOperations: total,
+                      insertedCount: e.changes.inserted?.length || 0,
+                      updatedCount: e.changes.updated?.length || 0,
+                      deletedCount: e.changes.deleted?.length || 0,
+                    },
+                    payload: {
+                      inserted: (e.changes.inserted || []).slice(0, 100),
+                      updated: (e.changes.updated || []).slice(0, 100).map((u) => ({
+                        key: u.key,
+                        values: u.values,
+                        oldValues: u.oldValues,
+                      })),
+                      deleted: (e.changes.deleted || []).slice(0, 200),
+                      deletedRowsSnapshot: (e.changes.deletedRowsData || []).slice(0, 40),
+                      ...(total > 200
+                        ? {
+                            _truncatedPreview: `Showing sample slice of ${total.toLocaleString()} total operations for fast UI rendering`,
+                          }
+                        : {}),
+                    },
+                  };
+                  setLastSavePayload(committedPayload);
+                  if (wizardOpen) {
+                    setWizardTab('diagnostics');
+                  }
                   pushEventLog(
                     'onSaved (Batch Committed)',
-                    `Committed ${e.changes.inserted?.length || 0} inserted, ${e.changes.updated?.length || 0} updated, ${e.changes.deleted?.length || 0} deleted`,
-                    'success'
+                    `Committed ${(e.changes.inserted?.length || 0).toLocaleString()} inserted, ${(e.changes.updated?.length || 0).toLocaleString()} updated, ${(e.changes.deleted?.length || 0).toLocaleString()} deleted`,
+                    'success',
+                    committedPayload
                   );
                 }}
               />
             </div>
 
-            {/* LIVE ENTERPRISE EVENT TRIGGER & CASCADING BACKEND CONSOLE DRAWER */}
-            {showEventDrawer && (
-              <aside
-                style={{
-                  width: 350,
-                  height: '100%',
-                  backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
-                  borderLeft: `1px solid ${isDark ? '#1E293B' : '#E2E8F0'}`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  flexShrink: 0,
-                  zIndex: 160,
-                }}
-              >
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderBottom: `1px solid ${isDark ? '#1E293B' : '#E2E8F0'}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 13 }}>
-                      ⚡ {isTR ? 'Etkinlik & Backend API Konsolu' : 'Live Event & Backend API Console'}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#94A3B8' }}>
-                      {isTR
-                        ? 'Şehir, Sektör veya Bakiye değiştirerek canlı izleyin'
-                        : 'Edit City, Sector, or Balance to see cascading updates'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEventLogs([])}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: 11,
-                      borderRadius: 5,
-                      border: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
-                      backgroundColor: 'transparent',
-                      color: isDark ? '#CBD5E1' : '#475569',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {isTR ? 'Temizle' : 'Clear'}
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    padding: 10,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6,
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                  }}
-                >
-                  {eventLogs.map((log) => {
-                    const color =
-                      log.status === 'success'
-                        ? '#10B981'
-                        : log.status === 'warning'
-                        ? '#F59E0B'
-                        : log.status === 'async'
-                        ? '#38BDF8'
-                        : '#94A3B8';
-                    return (
-                      <div
-                        key={log.id}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: 7,
-                          backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
-                          borderLeft: `3px solid ${color}`,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            marginBottom: 3,
-                            fontWeight: 700,
-                            color,
-                          }}
-                        >
-                          <span>{log.eventName}</span>
-                          <span style={{ opacity: 0.7 }}>{log.timestamp}</span>
-                        </div>
-                        <div style={{ color: isDark ? '#E2E8F0' : '#1E293B', lineHeight: 1.4 }}>
-                          {log.summary}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </aside>
-            )}
+            {/* STUDIO WIZARD, SETTINGS & DIAGNOSTICS DRAWER */}
+            <StudioWizardDrawer
+              open={wizardOpen}
+              activeTab={wizardTab}
+              onTabChange={setWizardTab}
+              onClose={() => setWizardOpen(false)}
+              isDark={isDark}
+              isTR={isTR}
+              state={wizardState}
+              onChange={setWizardState}
+              allColumns={allStudioColumns}
+              customColumns={customColumns}
+              onAddCustomColumn={handleAddCustomColumn}
+              onRemoveCustomColumn={handleRemoveCustomColumn}
+              selectedRowCount={selectedRowKeys.length}
+              eventLogs={eventLogs}
+              lastSavePayload={lastSavePayload}
+              onClearLogs={() => setEventLogs([])}
+            />
           </>
         )}
 
@@ -1127,7 +1357,7 @@ export function App() {
           <LandingPage
             isDark={isDark}
             lang={lang}
-            demoData={data}
+            demoData={landingData}
             demoColumns={columns}
             onOpenStudio={() => navigate('studio')}
             onOpenDocs={() => navigate('docs')}
@@ -1167,8 +1397,10 @@ export function App() {
             <div
               onMouseDown={(e) => e.stopPropagation()}
               style={{
-                width: 420,
-                padding: 22,
+                width: 'min(420px, calc(100vw - 24px))',
+                maxHeight: '86vh',
+                overflowY: 'auto',
+                padding: isMobile ? 16 : 22,
                 borderRadius: 14,
                 backgroundColor: isDark ? '#111827' : '#FFFFFF',
                 color: isDark ? '#F9FAFB' : '#0F172A',
