@@ -391,6 +391,57 @@ export class LocalDataStore implements IDataStore {
     return Promise.resolve();
   }
 
+  public async deleteRowsBatch(
+    rowKeys: any[],
+    onProgress?: (processed: number, total: number) => void
+  ): Promise<number> {
+    if (!rowKeys || rowKeys.length === 0) return 0;
+    const keySet = new Set<any>(rowKeys);
+    const totalToProcess = keySet.size;
+    const totalRaw = this.rawData.length;
+    const keptRows: Record<string, any>[] = [];
+    let removedCount = 0;
+
+    // Process in chunks so the UI progress bar updates smoothly at 60 FPS without freezing on 100k rows
+    const chunkSize = totalToProcess > 2000 ? Math.max(4000, Math.floor(totalRaw / 6)) : totalRaw + 1;
+
+    for (let start = 0; start < totalRaw; start += chunkSize) {
+      const end = Math.min(totalRaw, start + chunkSize);
+      for (let i = start; i < end; i++) {
+        const row = this.rawData[i];
+        const rk = row[this.keyField];
+        if (keySet.has(rk)) {
+          removedCount++;
+          if (this.batchMode) {
+            if (this.insertedKeys.has(rk)) {
+              this.insertedKeys.delete(rk);
+            } else {
+              const origData = this.originalRowSnapshots.get(rk) || row;
+              this.deletedRows.set(rk, { data: origData, index: i });
+            }
+            this.dirtyCells.delete(rk);
+          }
+        } else {
+          row.__rawIndex = keptRows.length;
+          keptRows.push(row);
+        }
+      }
+
+      if (onProgress) {
+        onProgress(Math.min(totalToProcess, removedCount), totalToProcess);
+      }
+      if (end < totalRaw) {
+        await new Promise((r) => setTimeout(r, 16));
+      }
+    }
+
+    this.rawData = keptRows;
+    this.distinctCache.clear();
+    this.recompute();
+    onProgress?.(totalToProcess, totalToProcess);
+    return removedCount;
+  }
+
   public async restoreRow(rowData: Record<string, any>, rawIndex?: number): Promise<void> {
     const key = rowData[this.keyField];
     const existingIdx = this.rawData.findIndex((r) => r[this.keyField] === key);
@@ -443,6 +494,10 @@ export class LocalDataStore implements IDataStore {
     );
   }
 
+  public getPendingChangesCount(): number {
+    return this.insertedKeys.size + this.dirtyCells.size + this.deletedRows.size;
+  }
+
   public getPendingChanges(): BatchChanges {
     const inserted: any[] = [];
     for (const key of this.insertedKeys) {
@@ -454,22 +509,86 @@ export class LocalDataStore implements IDataStore {
       }
     }
 
-    const updated: Array<{ key: any; values: Record<string, any> }> = [];
+    const updated: Array<{
+      key: any;
+      values: Record<string, any>;
+      oldValues?: Record<string, any>;
+      rowData?: Record<string, any>;
+    }> = [];
     for (const [key, cols] of this.dirtyCells.entries()) {
       if (cols.size === 0 || this.insertedKeys.has(key)) continue;
       const row = this.rawData.find((r) => r[this.keyField] === key);
       if (row) {
+        const orig = this.originalRowSnapshots.get(key) || {};
         const values: Record<string, any> = {};
+        const oldValues: Record<string, any> = {};
         for (const c of cols) {
           values[c] = row[c];
+          oldValues[c] = orig[c];
         }
-        updated.push({ key, values });
+        const cleanRow = { ...row };
+        delete cleanRow.__rawIndex;
+        updated.push({ key, values, oldValues, rowData: cleanRow });
       }
     }
 
     const deleted = Array.from(this.deletedRows.keys());
+    const deletedRowsData = Array.from(this.deletedRows.entries()).map(([key, entry]) => {
+      const clean = { ...entry.data };
+      delete clean.__rawIndex;
+      return { key, data: clean };
+    });
 
-    return { inserted, updated, deleted };
+    return { inserted, updated, deleted, deletedRowsData };
+  }
+
+  public revertPendingDelete(rowKey: any): void {
+    const entry = this.deletedRows.get(rowKey);
+    if (!entry) return;
+    const idx = Math.min(Math.max(0, entry.index), this.rawData.length);
+    this.rawData.splice(idx, 0, { ...entry.data });
+    this.deletedRows.delete(rowKey);
+    for (let i = 0; i < this.rawData.length; i++) {
+      this.rawData[i].__rawIndex = i;
+    }
+    this.distinctCache.clear();
+    this.recompute();
+  }
+
+  public revertPendingUpdate(rowKey: any, columnId?: string): void {
+    const orig = this.originalRowSnapshots.get(rowKey);
+    const cols = this.dirtyCells.get(rowKey);
+    const row = this.rawData.find((r) => r[this.keyField] === rowKey);
+    if (!orig || !cols || !row) return;
+
+    if (columnId) {
+      row[columnId] = orig[columnId];
+      cols.delete(columnId);
+      if (cols.size === 0) {
+        this.dirtyCells.delete(rowKey);
+        this.originalRowSnapshots.delete(rowKey);
+      }
+    } else {
+      for (const c of cols) {
+        row[c] = orig[c];
+      }
+      this.dirtyCells.delete(rowKey);
+      this.originalRowSnapshots.delete(rowKey);
+    }
+    delete row.__searchIndex;
+    this.distinctCache.clear();
+    this.recompute();
+  }
+
+  public revertPendingInsert(rowKey: any): void {
+    if (!this.insertedKeys.has(rowKey)) return;
+    this.insertedKeys.delete(rowKey);
+    this.rawData = this.rawData.filter((r) => r[this.keyField] !== rowKey);
+    for (let i = 0; i < this.rawData.length; i++) {
+      this.rawData[i].__rawIndex = i;
+    }
+    this.distinctCache.clear();
+    this.recompute();
   }
 
   public async saveBatchChanges(): Promise<BatchChanges> {

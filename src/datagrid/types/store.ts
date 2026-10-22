@@ -28,10 +28,23 @@ export interface RemoteOperationsConfig {
   distinct?: boolean;
 }
 
+export interface BatchUpdatedItem {
+  key: any;
+  values: Record<string, any>;
+  oldValues?: Record<string, any>;
+  rowData?: Record<string, any>;
+}
+
+export interface BatchDeletedItem {
+  key: any;
+  data: Record<string, any>;
+}
+
 export interface BatchChanges {
   inserted?: any[];
-  updated?: Array<{ key: any; values: Record<string, any> }>;
+  updated?: BatchUpdatedItem[];
   deleted?: any[];
+  deletedRowsData?: BatchDeletedItem[];
 }
 
 export interface IReadableStore {
@@ -67,16 +80,24 @@ export interface IMutableStore {
   insertRow?(rowData: Record<string, any>, targetViewRowIndex?: number): Promise<any>;
   duplicateRow?(rowKey: any, targetViewRowIndex?: number): Promise<any>;
   deleteRow?(rowKey: any): Promise<void>;
+  deleteRowsBatch?(
+    rowKeys: any[],
+    onProgress?: (processed: number, total: number) => void
+  ): Promise<number>;
   restoreRow?(rowData: Record<string, any>, rawIndex?: number): Promise<void>;
   setBatchMode?(enabled: boolean): void;
   isBatchMode?(): boolean;
   getPendingChanges?(): BatchChanges;
+  getPendingChangesCount?(): number;
   hasPendingChanges?(): boolean;
   isCellDirty?(rowKey: any, columnId: string): boolean;
   isColumnDirty?(columnId: string): boolean;
   isRowInserted?(rowKey: any): boolean;
   saveBatchChanges?(): Promise<BatchChanges>;
   discardBatchChanges?(): void;
+  revertPendingDelete?(rowKey: any): void;
+  revertPendingUpdate?(rowKey: any, columnId?: string): void;
+  revertPendingInsert?(rowKey: any): void;
 }
 
 export interface IDataStore
