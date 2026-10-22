@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { SheetGL, ColumnDef } from './datagrid';
 import { SheetGLLogo } from './datagrid';
 
@@ -24,6 +24,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onToggleLang,
 }) => {
   const isTR = lang === 'tr';
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 820 : false
+  );
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 820;
+      setIsMobile(mobile);
+      if (!mobile) setMobileMenuOpen(false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const colors = {
     bg: isDark ? '#06070B' : '#FAF9FE',
@@ -50,8 +64,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     ? [
         {
           icon: '⚡',
-          title: '60 FPS HTML5 Canvas Motoru',
-          desc: '10.000+ satır ve onlarca sütunu sıfır DOM şişkinliği ile akıcı 60 FPS hızında çizer. Sağ yan kaydırma göstergesi ve otomatik kenar kaydırma (edge auto-scroll) içerir.',
+          title: 'Yüksek Performanslı HTML5 Canvas Motoru',
+          desc: '10.000+ satır ve onlarca sütunu sıfır DOM şişkinliği ile akıcı şekilde çizer. Sağ yan kaydırma göstergesi ve otomatik kenar kaydırma (edge auto-scroll) içerir.',
         },
         {
           icon: '📐',
@@ -82,8 +96,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     : [
         {
           icon: '⚡',
-          title: '60 FPS HTML5 Canvas Engine',
-          desc: 'Renders 10,000+ rows with zero DOM bloat at 60 FPS. Includes right-side live scroll row indicator, quick jump buttons, and edge auto-scrolling.',
+          title: 'High-Performance HTML5 Canvas Engine',
+          desc: 'Renders 10,000+ rows with zero DOM bloat and ultra-smooth scrolling. Includes right-side live scroll row indicator, quick jump buttons, and edge auto-scrolling.',
         },
         {
           icon: '📐',
@@ -120,7 +134,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         },
         {
           q: '100.000 satırda tarayıcı donar mı?',
-          a: 'Kesinlikle hayır. Yalnızca ekranda görünen hücreler (viewport) çizilir. DOM üzerinde binlerce düğüm oluşmadığı için 60 FPS sabit hızda çalışır.',
+          a: 'Kesinlikle hayır. Yalnızca ekranda görünen hücreler (viewport) çizilir. DOM üzerinde binlerce düğüm oluşmadığı için yüksek veri hacimlerinde bile kesintisiz ve akıcı çalışır.',
         },
         {
           q: 'Excel kısayolları ve formül barı destekleniyor mu?',
@@ -134,7 +148,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         },
         {
           q: 'Does it freeze with 100,000 rows in the browser?',
-          a: 'Never. Only visible viewport cells are painted on HTML5 Canvas. Zero DOM node pollution ensures consistent 60 FPS performance.',
+          a: 'Never. Only visible viewport cells are painted on HTML5 Canvas. Zero DOM node pollution ensures consistent, lag-free performance.',
         },
         {
           q: 'Are native Excel shortcuts and formula bars supported?',
@@ -176,11 +190,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           style={{
             maxWidth: 1280,
             margin: '0 auto',
-            padding: '0 24px',
-            height: 68,
+            padding: isMobile ? '0 14px' : '0 24px',
+            height: isMobile ? 60 : 68,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: 8,
           }}
         >
           {/* LEFT: BRAND LOGO (Parabol Style) */}
@@ -189,176 +204,192 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
+              gap: isMobile ? 8 : 10,
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
-            <SheetGLLogo size={30} glow={true} />
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+            <SheetGLLogo size={isMobile ? 26 : 30} glow={true} />
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: isMobile ? 5 : 8 }}>
               <span
                 style={{
-                  fontSize: 22,
+                  fontSize: isMobile ? 19 : 22,
                   fontWeight: 900,
                   letterSpacing: '-0.035em',
                   color: colors.text,
                   fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif",
                 }}
               >
-                sheetgl
+                Sheet
+                <span
+                  style={{
+                    background:
+                      'linear-gradient(110deg, #c4b5fd 0%, #a855f7 32%, #818cf8 68%, #38bdf8 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  GL
+                </span>
               </span>
               <span
                 style={{
-                  fontSize: 10,
-                  fontWeight: 800,
-                  color: '#38BDF8',
-                  letterSpacing: '0.05em',
-                  textTransform: 'uppercase',
+                  fontSize: isMobile ? 11 : 12,
+                  fontWeight: 600,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  color: isDark ? '#38BDF8' : '#7C3AED',
+                  letterSpacing: '-0.02em',
+                  opacity: 0.92,
                 }}
               >
-                PRO
+                v1.0.6
               </span>
             </div>
           </div>
 
-          {/* CENTER: NAV LINKS */}
-          <nav
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 28,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => scrollToSection('features')}
+          {/* CENTER: NAV LINKS (Desktop) */}
+          {!isMobile && (
+            <nav
               style={{
-                background: 'none',
-                border: 'none',
-                color: isDark ? '#D1D5DB' : '#374151',
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'color 0.15s ease',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
-            >
-              {isTR ? 'Özellikler' : 'Features'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => scrollToSection('preview')}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: isDark ? '#D1D5DB' : '#374151',
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'color 0.15s ease',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
-            >
-              Demo
-            </button>
-
-            <button
-              type="button"
-              onClick={onOpenDocs}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: isDark ? '#D1D5DB' : '#374151',
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'color 0.15s ease',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
-            >
-              {isTR ? 'Dokümantasyon' : 'Docs'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => scrollToSection('faq')}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: isDark ? '#D1D5DB' : '#374151',
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'color 0.15s ease',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
-            >
-              {isTR ? 'SSS' : 'FAQ'}
-            </button>
-
-            <a
-              href="https://github.com/umitunc/sheetgl"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                color: isDark ? '#D1D5DB' : '#374151',
-                fontSize: 14,
-                fontWeight: 600,
-                textDecoration: 'none',
-                transition: 'color 0.15s ease',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-              </svg>
-              <span>GitHub</span>
-            </a>
-          </nav>
-
-          {/* RIGHT: GITHUB, THEME TOGGLE, LANG TOGGLE, CTA BUTTON (Parabol Style) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* GitHub Icon Button */}
-            <a
-              href="https://github.com/umitunc/sheetgl"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="GitHub Repository (umitunc/sheetgl)"
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 10,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
-                color: colors.text,
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                textDecoration: 'none',
-                transition: 'transform 0.15s ease, border-color 0.15s ease',
+                gap: 28,
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#38BDF8')}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = colors.border)}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-              </svg>
-            </a>
+              <button
+                type="button"
+                onClick={() => scrollToSection('features')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: isDark ? '#D1D5DB' : '#374151',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
+              >
+                {isTR ? 'Özellikler' : 'Features'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => scrollToSection('preview')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: isDark ? '#D1D5DB' : '#374151',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
+              >
+                Demo
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenDocs}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: isDark ? '#D1D5DB' : '#374151',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
+              >
+                {isTR ? 'Dokümantasyon' : 'Docs'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => scrollToSection('faq')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: isDark ? '#D1D5DB' : '#374151',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
+              >
+                {isTR ? 'SSS' : 'FAQ'}
+              </button>
+
+              <a
+                href="https://github.com/umitunc/sheetgl"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  color: isDark ? '#D1D5DB' : '#374151',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = isDark ? '#D1D5DB' : '#374151')}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                </svg>
+                <span>GitHub</span>
+              </a>
+            </nav>
+          )}
+
+          {/* RIGHT: GITHUB, THEME TOGGLE, LANG TOGGLE, CTA BUTTON (Parabol Style) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexShrink: 0 }}>
+            {/* GitHub Icon Button */}
+            {!isMobile && (
+              <a
+                href="https://github.com/umitunc/sheetgl"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="GitHub Repository (umitunc/sheetgl)"
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                  color: colors.text,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textDecoration: 'none',
+                  transition: 'transform 0.15s ease, border-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#38BDF8')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = colors.border)}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                </svg>
+              </a>
+            )}
             {/* Language Switcher */}
             <button
               type="button"
               onClick={onToggleLang}
               title={isTR ? 'Dili İngilizceye çevir' : 'Switch to Turkish'}
               style={{
-                padding: '6px 10px',
+                padding: isMobile ? '5px 8px' : '6px 10px',
                 borderRadius: 8,
                 border: `1px solid ${colors.border}`,
                 backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
@@ -377,8 +408,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={onToggleTheme}
               title={isTR ? 'Temayı Değiştir' : 'Toggle Theme'}
               style={{
-                width: 38,
-                height: 38,
+                width: isMobile ? 34 : 38,
+                height: isMobile ? 34 : 38,
                 borderRadius: 10,
                 border: `1px solid ${colors.border}`,
                 backgroundColor: isDark ? '#0D111A' : '#F1F5F9',
@@ -386,7 +417,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 16,
+                fontSize: isMobile ? 14 : 16,
                 cursor: 'pointer',
                 transition: 'transform 0.15s ease',
               }}
@@ -401,15 +432,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 8,
-                padding: '10px 20px',
+                gap: isMobile ? 5 : 8,
+                padding: isMobile ? '7px 13px' : '10px 20px',
                 borderRadius: 999,
                 border: 'none',
                 background: 'linear-gradient(135deg, #1D4ED8 0%, #0284C7 60%, #06B6D4 100%)',
                 color: '#FFFFFF',
                 fontWeight: 700,
-                fontSize: 13.5,
+                fontSize: isMobile ? 12.5 : 13.5,
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
                 boxShadow: isDark
                   ? '0 4px 18px rgba(2, 132, 199, 0.45)'
                   : '0 4px 14px rgba(2, 132, 199, 0.3)',
@@ -418,11 +450,150 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
               onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
             >
-              <span>{isTR ? 'Uygulamaya Git' : 'Launch Studio'}</span>
-              <span style={{ fontSize: 15 }}>→</span>
+              <span>{isMobile ? (isTR ? 'Stüdyo' : 'Studio') : isTR ? 'Uygulamaya Git' : 'Launch Studio'}</span>
+              <span style={{ fontSize: isMobile ? 13 : 15 }}>→</span>
             </button>
+
+            {/* Mobile Hamburger Menu Button */}
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((v) => !v)}
+                aria-label="Toggle Menu"
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 9,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)',
+                  color: colors.text,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 16,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {mobileMenuOpen ? '✕' : '☰'}
+              </button>
+            )}
           </div>
         </div>
+
+        {/* MOBILE COLLAPSIBLE NAV DRAWER */}
+        {isMobile && mobileMenuOpen && (
+          <div
+            style={{
+              padding: '12px 16px 16px',
+              borderTop: `1px solid ${colors.border}`,
+              backgroundColor: isDark ? 'rgba(6, 7, 11, 0.96)' : 'rgba(255, 255, 255, 0.98)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                scrollToSection('features');
+              }}
+              style={{
+                textAlign: 'left',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: 'none',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                color: colors.text,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              ⚡ {isTR ? 'Özellikler' : 'Features'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                scrollToSection('preview');
+              }}
+              style={{
+                textAlign: 'left',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: 'none',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                color: colors.text,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              📐 {isTR ? 'Canlı Tablo Önizleme' : 'Live Grid Preview'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenDocs();
+              }}
+              style={{
+                textAlign: 'left',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: 'none',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                color: colors.text,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              📚 {isTR ? 'Dokümantasyon (/documentation)' : 'Documentation (/documentation)'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                scrollToSection('faq');
+              }}
+              style={{
+                textAlign: 'left',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: 'none',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                color: colors.text,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              ❓ {isTR ? 'Sıkça Sorulan Sorular' : 'FAQ'}
+            </button>
+            <a
+              href="https://github.com/umitunc/sheetgl"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: '10px 12px',
+                borderRadius: 8,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                color: colors.text,
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span>🐙 GitHub (umitunc/sheetgl)</span>
+            </a>
+          </div>
+        )}
       </header>
 
       {/* HERO SECTION */}
@@ -430,20 +601,37 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         style={{
           maxWidth: 1260,
           margin: '0 auto',
-          padding: '48px 24px 32px',
+          padding: isMobile ? '28px 14px 24px' : '44px 24px 32px',
           textAlign: 'center',
           position: 'relative',
         }}
       >
+        {/* LARGE FRAMELESS TRANSLUCENT HERO EMBLEM (FileManGL Style) */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            marginBottom: isMobile ? 16 : 24,
+            pointerEvents: 'none',
+          }}
+        >
+          <SheetGLLogo
+            size={isMobile ? 96 : 134}
+            glow={true}
+            style={{
+              opacity: isDark ? 0.92 : 0.95,
+            }}
+          />
+        </div>
 
         {/* HERO TITLE (Large & Bold Parabol Typography) */}
         <h1
           className={isDark ? 'hero-title-dark' : 'hero-title-light'}
           style={{
-            fontSize: 'clamp(36px, 5.5vw, 68px)',
+            fontSize: 'clamp(30px, 5.5vw, 68px)',
             fontWeight: 800,
-            lineHeight: 1.1,
-            margin: '0 auto 20px',
+            lineHeight: 1.12,
+            margin: '0 auto 18px',
             maxWidth: 1040,
             letterSpacing: '-0.035em',
           }}
@@ -479,8 +667,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           }}
         >
           {isTR
-            ? '100.000+ satırda takılmayan 60 FPS Canvas performansı. Akıllı hücre çoğaltma, Excel kısayolları ve kurumsal veri yönetimi tek bir bileşende.'
-            : 'Silky-smooth 60 FPS Canvas performance across 100,000+ rows. Smart fill handles, Excel shortcuts, and enterprise-grade data management in a single component.'}
+            ? '100.000+ satırda takılmayan yüksek hızlı Canvas performansı. Akıllı hücre çoğaltma, Excel kısayolları ve kurumsal veri yönetimi tek bir bileşende.'
+            : 'Ultra-smooth Canvas performance across 100,000+ rows. Smart fill handles, Excel shortcuts, and enterprise-grade data management in a single component.'}
         </p>
 
         {/* CTA ACTIONS (Parabol Style) */}
@@ -563,8 +751,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           id="preview"
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: 8,
             maxWidth: 1220,
             margin: '0 auto 12px',
             padding: '0 4px',
@@ -580,22 +770,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 borderRadius: '50%',
                 backgroundColor: '#10B981',
                 boxShadow: '0 0 8px #10B981',
+                flexShrink: 0,
               }}
             />
             <span style={{ color: colors.text }}>
               {isTR ? 'Canlı İnteraktif Önizleme (Aşağıdaki Tabloyu Deneyin)' : 'Live Interactive Preview (Try the Grid Below)'}
             </span>
           </div>
-          <span style={{ fontSize: 11.5 }}>
-            {isTR ? 'Fill Handle • Satır Ekle/Sil • Çoklu Seçim' : 'Fill Handle • Add/Delete • Multi Select'}
-          </span>
+          {!isMobile && (
+            <span style={{ fontSize: 11.5 }}>
+              {isTR ? 'Fill Handle • Satır Ekle/Sil • Çoklu Seçim' : 'Fill Handle • Add/Delete • Multi Select'}
+            </span>
+          )}
         </div>
 
         {/* LIVE INTERACTIVE EMBEDDED PREVIEW CONTAINER */}
         <div
           style={{
-            height: 540,
-            borderRadius: 16,
+            height: isMobile ? 440 : 540,
+            borderRadius: isMobile ? 12 : 16,
             overflow: 'hidden',
             border: `1px solid ${colors.cardBorder}`,
             boxShadow: isDark
@@ -615,13 +808,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* FEATURE PILLARS GRID */}
-      <section id="features" style={{ maxWidth: 1260, margin: '0 auto', padding: '48px 24px 72px' }}>
+      <section id="features" style={{ maxWidth: 1260, margin: '0 auto', padding: isMobile ? '32px 14px 48px' : '48px 24px 72px' }}>
         <h2
           style={{
             textAlign: 'center',
-            fontSize: 32,
+            fontSize: isMobile ? 24 : 32,
             fontWeight: 800,
-            marginBottom: 36,
+            marginBottom: isMobile ? 24 : 36,
             letterSpacing: '-0.02em',
           }}
         >
@@ -630,8 +823,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-            gap: 20,
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(310px, 1fr))',
+            gap: isMobile ? 14 : 20,
           }}
         >
           {features.map((f, i) => (
@@ -721,15 +914,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           color: colors.muted,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 }}>
           <SheetGLLogo size={18} />
-          <span style={{ fontWeight: 800, color: colors.text }}>sheetgl</span>
+          <span style={{ fontWeight: 800, color: colors.text }}>
+            Sheet
+            <span
+              style={{
+                background:
+                  'linear-gradient(110deg, #c4b5fd 0%, #a855f7 32%, #818cf8 68%, #38bdf8 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              GL
+            </span>
+          </span>
+          <span
+            style={{
+              fontSize: 11.5,
+              fontWeight: 600,
+              fontFamily: "'JetBrains Mono', monospace",
+              color: isDark ? '#38BDF8' : '#7C3AED',
+              opacity: 0.9,
+            }}
+          >
+            v1.0.6
+          </span>
           <span>•</span>
           <span>Next-Gen WebGL & Canvas DataGrid for React</span>
         </div>
         <nav
           aria-label="Footer Links"
-          style={{ display: 'flex', justifyContent: 'center', gap: 18, marginBottom: 10, fontSize: 12.5 }}
+          style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 16px', marginBottom: 10, fontSize: 12.5 }}
         >
           <a
             href="/"
@@ -776,7 +992,68 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             Sitemap
           </a>
         </nav>
-        <div>MIT License • © 2026 SheetGL Team</div>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            marginBottom: 12,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11.5,
+          }}
+        >
+          <span
+            style={{
+              padding: '4px 10px',
+              borderRadius: 8,
+              border: `1px solid ${colors.border}`,
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#FFFFFF',
+              color: colors.text,
+            }}
+          >
+            $ npm install sheetgl
+          </span>
+          <span
+            style={{
+              padding: '4px 10px',
+              borderRadius: 8,
+              border: `1px solid ${colors.border}`,
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#FFFFFF',
+              color: colors.text,
+            }}
+          >
+            $ npx sheetgl init
+          </span>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+        >
+          <span>MIT License • © {new Date().getFullYear()} SheetGL</span>
+          <span>•</span>
+          <span>
+            Crafted with ❤️ by{' '}
+            <a
+              href="https://www.truncgil.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: isDark ? '#FDBA74' : '#EA580C',
+                fontWeight: 800,
+                textDecoration: 'none',
+              }}
+            >
+              🍊 Trunçgil Teknoloji
+            </a>
+          </span>
+        </div>
       </footer>
     </div>
   );
