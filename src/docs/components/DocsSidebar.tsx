@@ -10,6 +10,9 @@ export interface DocsSidebarProps {
   searchQuery: string;
   isTR: boolean;
   colors: DocThemeColors;
+  isMobile?: boolean;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
   onSearchChange: (q: string) => void;
   onSelectSection: (id: string) => void;
   onToggleExpandSection: (id: string) => void;
@@ -24,25 +27,52 @@ export const DocsSidebar: React.FC<DocsSidebarProps> = ({
   searchQuery,
   isTR,
   colors,
+  isMobile = false,
+  mobileOpen = false,
+  onCloseMobile,
   onSearchChange,
   onSelectSection,
   onToggleExpandSection,
   onSelectSubItem,
 }) => {
+  if (isMobile && !mobileOpen) {
+    return null;
+  }
+
   return (
-    <aside
-      style={{
-        width: 295,
-        backgroundColor: colors.sidebarBg,
-        borderRight: `1px solid ${colors.border}`,
-        padding: 18,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-        overflowY: 'auto',
-        flexShrink: 0,
-      }}
-    >
+    <>
+      {isMobile && mobileOpen && (
+        <div
+          onClick={onCloseMobile}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            top: 56,
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 540,
+          }}
+        />
+      )}
+      <aside
+        style={{
+          position: isMobile ? 'fixed' : 'relative',
+          top: isMobile ? 56 : undefined,
+          left: isMobile ? 0 : undefined,
+          bottom: isMobile ? 0 : undefined,
+          width: isMobile ? 'min(305px, 86vw)' : 295,
+          backgroundColor: colors.sidebarBg,
+          borderRight: `1px solid ${colors.border}`,
+          padding: 18,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          overflowY: 'auto',
+          flexShrink: 0,
+          zIndex: isMobile ? 550 : undefined,
+          boxShadow: isMobile ? '12px 0 36px rgba(0,0,0,0.45)' : undefined,
+        }}
+      >
       <div style={{ position: 'relative', marginBottom: 10 }}>
         <MaterialIcon
           name="search"
@@ -177,5 +207,6 @@ export const DocsSidebar: React.FC<DocsSidebarProps> = ({
         );
       })}
     </aside>
+    </>
   );
 };

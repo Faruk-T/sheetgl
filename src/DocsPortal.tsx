@@ -33,6 +33,20 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [colCategoryFilter, setColCategoryFilter] = useState<ColumnCategory>('all');
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 900 : false
+  );
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 900;
+      setIsMobile(mobile);
+      if (!mobile) setMobileSidebarOpen(false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     const nextSec = initialSectionId || initialSection;
@@ -85,6 +99,7 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
     setActiveSectionId(id);
     setActiveSubId('');
     setExpandedSections((prev) => ({ ...prev, [id]: true }));
+    setMobileSidebarOpen(false);
     onSectionChange?.(id);
     const mainEl = document.getElementById('docs-main-scroll');
     if (mainEl) mainEl.scrollTo({ top: 0, behavior: 'smooth' });
@@ -101,6 +116,7 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
     }
     setActiveSubId(sub.id);
     setExpandedSections((prev) => ({ ...prev, [sectionId]: true }));
+    setMobileSidebarOpen(false);
     sub.onSelect?.();
     setTimeout(() => {
       const targetEl = document.getElementById(sub.id);
@@ -128,13 +144,16 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
         isDark={isDark}
         isTR={isTR}
         colors={colors}
+        isMobile={isMobile}
+        mobileSidebarOpen={mobileSidebarOpen}
+        onToggleMobileSidebar={() => setMobileSidebarOpen((v) => !v)}
         onGoLanding={handleGoLanding}
         onGoStudio={handleGoStudio}
         onToggleLang={onToggleLang}
         onToggleTheme={onToggleTheme}
       />
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
         <DocsSidebar
           sections={visibleSections}
           activeSectionId={activeSection.id}
@@ -143,6 +162,9 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
           searchQuery={searchQuery}
           isTR={isTR}
           colors={colors}
+          isMobile={isMobile}
+          mobileOpen={mobileSidebarOpen}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
           onSearchChange={setSearchQuery}
           onSelectSection={handleSelectSection}
           onToggleExpandSection={handleToggleExpandSection}
@@ -154,11 +176,44 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '40px 56px 80px',
+            overflowX: 'hidden',
+            padding: isMobile ? '18px 14px 64px' : '40px 56px 80px',
           }}
         >
           <div style={{ maxWidth: 980, margin: '0 auto' }}>
-            <div style={{ marginBottom: 28 }}>
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(true)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  marginBottom: 18,
+                  borderRadius: 10,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.surface,
+                  color: colors.text,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <span>
+                  📑 {isTR ? 'Bölüm:' : 'Section:'}{' '}
+                  <strong style={{ color: colors.accent }}>
+                    {isTR ? activeSection.titleTr : activeSection.titleEn}
+                  </strong>
+                </span>
+                <span style={{ color: colors.accent, fontSize: 12 }}>
+                  {isTR ? 'Tüm Konular ▾' : 'All Topics ▾'}
+                </span>
+              </button>
+            )}
+
+            <div style={{ marginBottom: isMobile ? 20 : 28 }}>
               <span
                 style={{
                   display: 'inline-block',
@@ -176,15 +231,16 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
               </span>
               <h1
                 style={{
-                  fontSize: 32,
+                  fontSize: isMobile ? 24 : 32,
                   fontWeight: 800,
                   margin: '0 0 10px',
                   letterSpacing: '-0.02em',
+                  lineHeight: 1.2,
                 }}
               >
                 {isTR ? activeSection.titleTr : activeSection.titleEn}
               </h1>
-              <p style={{ fontSize: 17, color: colors.muted, margin: 0, lineHeight: 1.6 }}>
+              <p style={{ fontSize: isMobile ? 14.5 : 17, color: colors.muted, margin: 0, lineHeight: 1.6 }}>
                 {isTR ? activeSection.subtitleTr : activeSection.subtitleEn}
               </p>
             </div>
@@ -198,8 +254,9 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
                 paddingTop: 24,
                 borderTop: `1px solid ${colors.border}`,
                 display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
                 justifyContent: 'space-between',
-                gap: 16,
+                gap: 12,
               }}
             >
               {prevSection ? (

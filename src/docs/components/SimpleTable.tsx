@@ -12,12 +12,13 @@ export const SimpleTable: React.FC<SimpleTableProps> = ({ headers, rows, colors 
     style={{
       margin: '16px 0 24px',
       borderRadius: 12,
-      overflow: 'hidden',
+      overflowX: 'auto',
+      WebkitOverflowScrolling: 'touch',
       border: `1px solid ${colors.border}`,
       backgroundColor: colors.surface,
     }}
   >
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
+    <table style={{ width: '100%', minWidth: 480, borderCollapse: 'collapse', fontSize: 14 }}>
       <thead>
         <tr style={{ backgroundColor: colors.surfaceAlt }}>
           {headers.map((h, i) => (

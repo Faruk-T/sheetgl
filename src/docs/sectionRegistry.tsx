@@ -11,6 +11,7 @@ import { ExcelUxSection } from './sections/ExcelUxSection';
 import { BatchStoreSection } from './sections/BatchStoreSection';
 import { ToolbarSummarySection } from './sections/ToolbarSummarySection';
 import { ThemingI18nSection } from './sections/ThemingI18nSection';
+import { ColumnGroupsAndColorsSection } from './sections/ColumnGroupsAndColorsSection';
 
 export interface BuildDocSectionsParams {
   isDark: boolean;
@@ -36,9 +37,9 @@ export function buildDocSections({
       titleTr: 'Kurulum, Mimari & Hızlı Başlangıç',
       titleEn: 'Installation, Architecture & Quick Start',
       subtitleTr:
-        'SheetGL Pro paketini NPM veya NPX CLI ile kurun; aşağıdaki canlı interaktif tabloyu ve başlangıç kodunu inceleyin.',
+        'SheetGL paketini NPM veya NPX CLI ile kurun; aşağıdaki canlı interaktif tabloyu ve başlangıç kodunu inceleyin.',
       subtitleEn:
-        'Install SheetGL Pro via NPM or NPX CLI; explore the live interactive starter grid and code below.',
+        'Install SheetGL via NPM or NPX CLI; explore the live interactive starter grid and code below.',
       subItems: [
         { id: 'qs-live', labelTr: 'Canlı Başlangıç Tablosu', labelEn: 'Live Starter Grid' },
         { id: 'qs-install', labelTr: 'NPM & NPX CLI Kurulumu', labelEn: 'NPM & NPX CLI Setup' },
@@ -217,6 +218,25 @@ export function buildDocSections({
         { id: 'thm-code', labelTr: 'Hazır Temalar & Özel Token Kodu', labelEn: 'Theme Presets & Custom Tokens' },
       ],
       render: () => <ThemingI18nSection isDark={isDark} isTR={isTR} colors={colors} />,
+    },
+    {
+      id: 'column-groups-colors',
+      step: '11',
+      badgeTr: 'SÜTUN GRUPLARI & DARK/LIGHT RENKLENDİRME',
+      badgeEn: 'COLUMN GROUPS & DARK/LIGHT COLORING',
+      titleTr: 'Sütun Grupları (Banded Headers) & Tema Uyumlu Renklendirme',
+      titleEn: 'Banded Column Groups & Theme-Aware Column/Header Coloring',
+      subtitleTr:
+        'Üst sütun grupları (columnGroups), grup sütunlara renk mirası, başlık (headerColor) ve sütun (columnColor) renklerini Dark & Light temaya uyumlu olarak atama rehberi.',
+      subtitleEn:
+        'Complete guide to Banded Column Groups (columnGroups), group color inheritance, and Dark & Light theme-aware headerColor and columnColor customization.',
+      subItems: [
+        { id: 'cgc-live', labelTr: 'Canlı Sütun Grupları & Renk Testi', labelEn: 'Live Column Groups & Color Playground' },
+        { id: 'cgc-groups', labelTr: 'Banded Sütun Grupları (ColumnGroupDef)', labelEn: 'Banded Column Groups (ColumnGroupDef)' },
+        { id: 'cgc-colors', labelTr: 'Dark/Light Başlık & Sütun Renkleri', labelEn: 'Dark/Light Header & Column Colors' },
+        { id: 'cgc-reference', labelTr: '13 Semantik Renk Paleti & Referans', labelEn: '13 Semantic Color Presets & Reference' },
+      ],
+      render: () => <ColumnGroupsAndColorsSection isDark={isDark} isTR={isTR} colors={colors} />,
     },
   ];
 }

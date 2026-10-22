@@ -26,7 +26,7 @@ export const ColumnGuideCard: React.FC<ColumnGuideCardProps> = ({
         borderRadius: 14,
         border: `1px solid ${colors.border}`,
         backgroundColor: colors.surface,
-        padding: '24px 26px',
+        padding: 'clamp(14px, 3vw, 24px)',
         boxShadow: isDark
           ? '0 6px 20px rgba(0,0,0,0.25)'
           : '0 4px 14px rgba(15,23,42,0.04)',

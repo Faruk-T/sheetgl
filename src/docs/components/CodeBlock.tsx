@@ -46,17 +46,19 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '10px 16px',
+          gap: 8,
+          padding: '10px 14px',
           backgroundColor: colors.codeHeaderBg,
           borderBottom: '1px solid #1E293B',
-          fontSize: 13,
+          fontSize: 12.5,
           fontFamily: "'JetBrains Mono', monospace",
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 6, marginRight: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 6, marginRight: 2, flexShrink: 0 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#EF4444', opacity: 0.85 }} />
             <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#F59E0B', opacity: 0.85 }} />
             <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#10B981', opacity: 0.85 }} />
@@ -69,12 +71,13 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
               color: '#38BDF8',
               fontWeight: 700,
               fontSize: 11,
+              flexShrink: 0,
             }}
           >
             {langBadge}
           </span>
-          <span style={{ color: '#F8FAFC', fontWeight: 600 }}>{title}</span>
-          <span style={{ color: '#64748B', fontSize: 11.5 }}>({lines.length} lines)</span>
+          <span style={{ color: '#F8FAFC', fontWeight: 600, wordBreak: 'break-word' }}>{title}</span>
+          <span style={{ color: '#64748B', fontSize: 11 }}>({lines.length} lines)</span>
         </div>
         <button
           type="button"

@@ -154,7 +154,7 @@ export const ValidationSection: React.FC<ValidationSectionProps> = ({
       >
         {isTR ? (
           <>
-            SheetGL Pro, DevExtreme DataGrid’deki <code>Deferred</code> yapısını birebir destekler.{' '}
+            SheetGL, DevExtreme DataGrid’deki <code>Deferred</code> yapısını birebir destekler.{' '}
             <code>type: 'async'</code> kuralında <code>validationCallback</code> içerisine hazır bir{' '}
             <code>deferred</code> nesnesi gelir (veya <code>new Deferred()</code> /{' '}
             <code>createDeferred()</code> oluşturabilirsiniz):
@@ -167,7 +167,7 @@ export const ValidationSection: React.FC<ValidationSectionProps> = ({
           </>
         ) : (
           <>
-            SheetGL Pro natively supports the DevExtreme DataGrid <code>Deferred</code> pattern. Inside an{' '}
+            SheetGL natively supports the DevExtreme DataGrid <code>Deferred</code> pattern. Inside an{' '}
             <code>async</code> rule’s <code>validationCallback</code>, you can use the built-in{' '}
             <code>deferred</code> parameter (or instantiate <code>new Deferred()</code> /{' '}
             <code>createDeferred()</code>):

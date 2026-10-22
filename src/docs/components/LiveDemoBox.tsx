@@ -1,7 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { SheetGL } from '../../datagrid/ui/SheetGL';
 import { MaterialIcon } from '../../datagrid/ui/MaterialIcon';
-import { ColumnDef, GridPermissions, GridSummaryConfig, GridToolbarConfig } from '../../datagrid/types/grid';
+import {
+  ColumnDef,
+  ColumnGroupDef,
+  GridPermissions,
+  GridSummaryConfig,
+  GridToolbarConfig,
+} from '../../datagrid/types/grid';
 import { DocThemeColors } from '../types';
 
 export interface LiveDemoBoxProps {
@@ -11,6 +17,8 @@ export interface LiveDemoBoxProps {
   height?: number;
   data: any[];
   columns: ColumnDef[];
+  columnGroups?: ColumnGroupDef[];
+  groupHeaderHeight?: number;
   isDark: boolean;
   isTR: boolean;
   colors: DocThemeColors;
@@ -31,6 +39,8 @@ export const LiveDemoBox: React.FC<LiveDemoBoxProps> = ({
   height = 240,
   data,
   columns: demoCols,
+  columnGroups,
+  groupHeaderHeight,
   isDark,
   isTR,
   colors,
@@ -188,6 +198,8 @@ export const LiveDemoBox: React.FC<LiveDemoBoxProps> = ({
           key={`${resetKey}_${isTR ? 'tr' : 'en'}_${isDark}`}
           dataSource={clonedData}
           columns={demoCols}
+          columnGroups={columnGroups}
+          groupHeaderHeight={groupHeaderHeight}
           theme={isDark ? 'apple-dark' : 'apple-light'}
           locale={isTR ? 'tr-TR' : 'en-US'}
           initialGroups={initialGroups}

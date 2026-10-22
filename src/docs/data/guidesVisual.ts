@@ -51,7 +51,7 @@ export const VISUAL_GUIDES: ColumnGuideItem[] = [
     dataType: 'number[]',
     sampleValue: '[25, 40, 35, 60, 55, 75, 85]',
     summaryTr:
-      'Sayı dizisini hücre içinde 60 FPS hızında yumuşak dolgulu çizgi grafik (Area Sparkline) olarak çizer. Sağ üstteki büyüteç ikonuna veya hücreye çift tıklandığında detaylı interaktif grafik modalı açılır.',
+      'Sayı dizisini hücre içinde akıcı ve yumuşak dolgulu çizgi grafik (Area Sparkline) olarak çizer. Sağ üstteki büyüteç ikonuna veya hücreye çift tıklandığında detaylı interaktif grafik modalı açılır.',
     summaryEn:
       'Renders an array of numbers as a smooth canvas area-line chart inside the cell. Clicking the expand icon or double-clicking opens the full-screen interactive Trend Analytics Modal.',
     editorTr: 'Salt-görsel analitik sütundur; tıklandığında Detaylı Trend Analiz Modalı açar.',

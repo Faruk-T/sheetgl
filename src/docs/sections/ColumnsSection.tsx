@@ -41,8 +41,8 @@ export const ColumnsSection: React.FC<ColumnsSectionProps> = ({
     <div>
       <p style={{ fontSize: 16, lineHeight: 1.7, color: colors.muted, marginTop: 0 }}>
         {isTR
-          ? 'SheetGL Pro, kurumsal uygulamalar için kutudan çıktığı anda hazır 21 yerleşik sütun türü (ColumnType) sunar. Aşağıda hem tüm sütunların bir arada bulunduğu genel tabloyu hem de her bir sütun türünün kendi özel canlı demosunu ve yapılandırma kodunu inceleyebilirsiniz.'
-          : 'SheetGL Pro ships with 21 built-in enterprise column types out of the box. Below you can explore the combined interactive playground as well as a dedicated live demo and configuration code for every single column type.'}
+          ? 'SheetGL, kurumsal uygulamalar için kutudan çıktığı anda hazır 21 yerleşik sütun türü (ColumnType) sunar. Aşağıda hem tüm sütunların bir arada bulunduğu genel tabloyu hem de her bir sütun türünün kendi özel canlı demosunu ve yapılandırma kodunu inceleyebilirsiniz.'
+          : 'SheetGL ships with 21 built-in enterprise column types out of the box. Below you can explore the combined interactive playground as well as a dedicated live demo and configuration code for every single column type.'}
       </p>
 
       {/* Interactive Category Tabs + Search */}
@@ -104,7 +104,8 @@ export const ColumnsSection: React.FC<ColumnsSectionProps> = ({
               : 'Filter column types (e.g. object, lookup, currency)...'
           }
           style={{
-            minWidth: 260,
+            flex: '1 1 200px',
+            width: '100%',
             padding: '8px 12px',
             borderRadius: 8,
             border: `1px solid ${colors.border}`,

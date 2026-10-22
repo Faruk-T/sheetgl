@@ -75,26 +75,26 @@ export const QuickStartSection: React.FC<QuickStartSectionProps> = ({
         colors={colors}
         code={
           isTR
-            ? `# Seçenek A: Yerel .tgz paketi veya proje klasörü üzerinden kurulum (NPM'e yayınlamadan önce)
-npm install "D:/Works/2026/datagrid/sheetgl-2.0.0.tgz"
-# veya doğrudan klasör yolundan:
-npm install "D:/Works/2026/datagrid"
-
-# Seçenek B: NPM Registry'ye yayınladıktan (npm publish) sonra kurulum
+            ? `# Seçenek A: NPM Registry üzerinden doğrudan kurulum (Önerilen)
 npm install sheetgl
 
 # İsteğe bağlı: Hazır kurumsal tablo bileşenini tek komutla projenize üretin
-npx sheetgl init --dir ./src/components --name FinancialGrid --rows 1000`
-            : `# Option A: Install from local .tgz tarball or workspace folder (before publishing to npm)
-npm install "D:/Works/2026/datagrid/sheetgl-2.0.0.tgz"
-# or directly from folder path:
-npm install "D:/Works/2026/datagrid"
+npx sheetgl init --dir ./src/components --name FinancialGrid --rows 1000
 
-# Option B: Install from public NPM Registry (after running npm publish)
+# Seçenek B: Yerel .tgz paketi veya proje dizini (path) üzerinden kurulum
+npm install ./path/to/sheetgl-1.0.6.tgz
+# veya doğrudan yerel klasör yolundan:
+npm install ../path/to/sheetgl`
+            : `# Option A: Install directly from NPM Registry (Recommended)
 npm install sheetgl
 
 # Optional: Scaffold a ready-to-run TypeScript grid component
-npx sheetgl init --dir ./src/components --name FinancialGrid --rows 1000`
+npx sheetgl init --dir ./src/components --name FinancialGrid --rows 1000
+
+# Option B: Install from a local .tgz tarball or project directory path
+npm install ./path/to/sheetgl-1.0.6.tgz
+# or directly from a local folder path:
+npm install ../path/to/sheetgl`
         }
       />
 
