@@ -1,4 +1,4 @@
-import { ColumnDef } from '../types/grid';
+import { ColumnDef, ColumnGroupDef } from '../types/grid';
 import { SelectionModel } from './SelectionModel';
 
 export interface HitTestResult {
@@ -16,12 +16,21 @@ export interface HeaderHitTestResult {
   headerX: number;
   headerWidth: number;
   isFilterIconHit: boolean;
+  isGroupHeaderHit?: boolean;
+  groupDef?: ColumnGroupDef;
+  groupColIndices?: number[];
 }
 
 export class GeometryEngine {
   public rowHeight: number = 34;
+  public baseHeaderHeight: number = 38;
+  public groupHeaderHeight: number = 30;
   public headerHeight: number = 38;
+  public hasColumnGroups: boolean = false;
+  public columnGroups: ColumnGroupDef[] = [];
+  private colToGroupMap: Map<string, ColumnGroupDef> = new Map();
   public rowNumberWidth: number = 54;
+  public viewportWidth: number = typeof window !== 'undefined' ? window.innerWidth : 1200;
 
   public columns: ColumnDef[] = [];
   public frozenColumns: ColumnDef[] = [];
@@ -30,10 +39,105 @@ export class GeometryEngine {
   public totalScrollableWidth: number = 0;
   public scrollableColOffsets: Float32Array = new Float32Array(0);
 
-  constructor(columns: ColumnDef[] = [], rowHeight: number = 34, headerHeight: number = 38) {
+  constructor(
+    columns: ColumnDef[] = [],
+    rowHeight: number = 34,
+    headerHeight: number = 38,
+    columnGroups: ColumnGroupDef[] = [],
+    groupHeaderHeight: number = 30
+  ) {
     this.rowHeight = rowHeight;
+    this.baseHeaderHeight = headerHeight;
+    this.groupHeaderHeight = groupHeaderHeight;
     this.headerHeight = headerHeight;
+    this.columnGroups = columnGroups;
     this.setColumns(columns);
+  }
+
+  public setColumnGroups(columnGroups: ColumnGroupDef[] = [], groupHeaderHeight?: number): void {
+    this.columnGroups = columnGroups;
+    if (groupHeaderHeight !== undefined && groupHeaderHeight > 0) {
+      this.groupHeaderHeight = groupHeaderHeight;
+    }
+    this.recalculateGeometry();
+  }
+
+  public setBaseHeaderHeight(height: number): void {
+    if (height > 0 && this.baseHeaderHeight !== height) {
+      this.baseHeaderHeight = height;
+      this.recalculateGeometry();
+    }
+  }
+
+  public getColumnGroup(col: ColumnDef): ColumnGroupDef | undefined {
+    return this.colToGroupMap.get(col.id);
+  }
+
+  private rebuildColumnGroupMap(): void {
+    this.colToGroupMap.clear();
+    const groupsById = new Map<string, ColumnGroupDef>();
+    const groupsByTitle = new Map<string, ColumnGroupDef>();
+
+    for (const g of this.columnGroups) {
+      if (!g) continue;
+      groupsById.set(g.id, g);
+      groupsByTitle.set(g.title, g);
+      if (Array.isArray(g.columnIds)) {
+        for (const colId of g.columnIds) {
+          this.colToGroupMap.set(colId, g);
+        }
+      }
+    }
+
+    for (const col of this.columns) {
+      if (col.id === '__selection__') continue;
+      if (col.headerGroup) {
+        if (typeof col.headerGroup === 'string') {
+          const existing =
+            groupsById.get(col.headerGroup) || groupsByTitle.get(col.headerGroup);
+          if (existing) {
+            this.colToGroupMap.set(col.id, existing);
+          } else {
+            const inlineGroup: ColumnGroupDef = {
+              id: col.headerGroup,
+              title: col.headerGroup,
+            };
+            groupsById.set(inlineGroup.id, inlineGroup);
+            groupsByTitle.set(inlineGroup.title, inlineGroup);
+            this.colToGroupMap.set(col.id, inlineGroup);
+          }
+        } else if (typeof col.headerGroup === 'object') {
+          groupsById.set(col.headerGroup.id, col.headerGroup);
+          this.colToGroupMap.set(col.id, col.headerGroup);
+        }
+      } else if (col.groupId) {
+        const existing = groupsById.get(col.groupId) || groupsByTitle.get(col.groupId);
+        if (existing) {
+          this.colToGroupMap.set(col.id, existing);
+        } else {
+          const inlineGroup: ColumnGroupDef = {
+            id: col.groupId,
+            title: col.groupId,
+          };
+          groupsById.set(inlineGroup.id, inlineGroup);
+          this.colToGroupMap.set(col.id, inlineGroup);
+        }
+      }
+    }
+
+    this.hasColumnGroups = this.colToGroupMap.size > 0;
+    this.headerHeight = this.hasColumnGroups
+      ? this.baseHeaderHeight + this.groupHeaderHeight
+      : this.baseHeaderHeight;
+  }
+
+  public setViewportWidth(width: number): boolean {
+    if (width > 0 && Math.abs(this.viewportWidth - width) >= 2) {
+      this.viewportWidth = width;
+      this.recalculateGeometry();
+      return true;
+    }
+    return false;
   }
 
   public setColumns(columns: ColumnDef[]): void {
@@ -46,8 +150,34 @@ export class GeometryEngine {
   }
 
   public recalculateGeometry(): void {
-    this.frozenColumns = this.columns.filter((c) => Boolean(c.pinned));
-    this.scrollableColumns = this.columns.filter((c) => !c.pinned);
+    const isMobileViewport = this.viewportWidth > 0 && this.viewportWidth < 680;
+    this.rowNumberWidth = isMobileViewport ? 38 : 54;
+
+    if (isMobileViewport) {
+      // On narrow mobile screens, prevent pinned columns from consuming the entire viewport width
+      const maxFrozenBudget = Math.max(88, Math.floor(this.viewportWidth * 0.34));
+      const nextFrozen: ColumnDef[] = [];
+      const nextScrollable: ColumnDef[] = [];
+      let currentFrozenW = this.rowNumberWidth;
+
+      for (const col of this.columns) {
+        if (
+          col.pinned &&
+          (col.id === '__selection__' || currentFrozenW + col.width <= maxFrozenBudget)
+        ) {
+          nextFrozen.push(col);
+          currentFrozenW += col.width;
+        } else {
+          nextScrollable.push(col);
+        }
+      }
+      this.frozenColumns = nextFrozen;
+      this.scrollableColumns = nextScrollable;
+      this.columns = [...nextFrozen, ...nextScrollable];
+    } else {
+      this.frozenColumns = this.columns.filter((c) => Boolean(c.pinned));
+      this.scrollableColumns = this.columns.filter((c) => !c.pinned);
+    }
 
     this.totalFrozenWidth =
       this.rowNumberWidth + this.frozenColumns.reduce((sum, c) => sum + c.width, 0);
@@ -60,6 +190,7 @@ export class GeometryEngine {
     }
     this.scrollableColOffsets[this.scrollableColumns.length] = acc;
     this.totalScrollableWidth = acc;
+    this.rebuildColumnGroupMap();
   }
 
   public findScrollableColIndexAtX(scrollX: number): number {
@@ -147,8 +278,41 @@ export class GeometryEngine {
     }
 
     const colDef = this.columns[clickedCol];
-    const isFilterable = colDef.filterable !== false && colDef.type !== 'sparkline' && colDef.type !== 'action';
-    const isFilterIconHit = isFilterable && canvasX >= headerX + headerW - 28 && canvasX <= headerX + headerW - 2;
+    const groupDef = this.getColumnGroup(colDef);
+    const isGroupHeaderHit = Boolean(this.hasColumnGroups && groupDef && canvasY < this.groupHeaderHeight);
+
+    let groupColIndices: number[] | undefined;
+    if (groupDef) {
+      const isFrozenPartition = clickedCol < this.frozenColumns.length;
+      const minBound = isFrozenPartition ? 0 : this.frozenColumns.length;
+      const maxBound = isFrozenPartition ? this.frozenColumns.length - 1 : this.columns.length - 1;
+      let startIdx = clickedCol;
+      let endIdx = clickedCol;
+      while (
+        startIdx > minBound &&
+        this.getColumnGroup(this.columns[startIdx - 1])?.id === groupDef.id
+      ) {
+        startIdx--;
+      }
+      while (
+        endIdx < maxBound &&
+        this.getColumnGroup(this.columns[endIdx + 1])?.id === groupDef.id
+      ) {
+        endIdx++;
+      }
+      groupColIndices = [];
+      for (let idx = startIdx; idx <= endIdx; idx++) {
+        groupColIndices.push(idx);
+      }
+    }
+
+    const isFilterable =
+      !isGroupHeaderHit &&
+      colDef.filterable !== false &&
+      colDef.type !== 'sparkline' &&
+      colDef.type !== 'action';
+    const isFilterIconHit =
+      isFilterable && canvasX >= headerX + headerW - 28 && canvasX <= headerX + headerW - 2;
 
     return {
       colIndex: clickedCol,
@@ -156,6 +320,9 @@ export class GeometryEngine {
       headerX,
       headerWidth: headerW,
       isFilterIconHit,
+      isGroupHeaderHit,
+      groupDef,
+      groupColIndices,
     };
   }
 
@@ -276,11 +443,22 @@ export class GeometryEngine {
     scrollLeft: number
   ): { colIndex: number; isFrozen: boolean } | null {
     if (canvasY > this.headerHeight || canvasY < 0) return null;
+    const inGroupBand = this.hasColumnGroups && canvasY < this.groupHeaderHeight;
 
     let curX = this.rowNumberWidth;
     for (let i = 0; i < this.frozenColumns.length; i++) {
       curX += this.frozenColumns[i].width;
       if (Math.abs(canvasX - curX) <= 4) {
+        if (inGroupBand) {
+          const curGroup = this.getColumnGroup(this.frozenColumns[i]);
+          const nextGroup =
+            i + 1 < this.frozenColumns.length
+              ? this.getColumnGroup(this.frozenColumns[i + 1])
+              : undefined;
+          if (curGroup && nextGroup && curGroup.id === nextGroup.id) {
+            continue;
+          }
+        }
         return { colIndex: i, isFrozen: true };
       }
     }
@@ -290,6 +468,16 @@ export class GeometryEngine {
         const borderX =
           this.totalFrozenWidth + this.scrollableColOffsets[i + 1] - scrollLeft;
         if (Math.abs(canvasX - borderX) <= 4) {
+          if (inGroupBand) {
+            const curGroup = this.getColumnGroup(this.scrollableColumns[i]);
+            const nextGroup =
+              i + 1 < this.scrollableColumns.length
+                ? this.getColumnGroup(this.scrollableColumns[i + 1])
+                : undefined;
+            if (curGroup && nextGroup && curGroup.id === nextGroup.id) {
+              continue;
+            }
+          }
           return { colIndex: this.frozenColumns.length + i, isFrozen: false };
         }
       }

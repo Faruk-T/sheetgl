@@ -29,6 +29,8 @@ export type ColumnType =
 
 export type ColumnPermission = 'write' | 'readonly' | 'read';
 
+export type RowSelectionMode = 'none' | 'single' | 'multiple';
+
 export interface SelectOption {
   value: string;
   label: string;
@@ -134,6 +136,115 @@ export interface CascadingUpdateContext {
   store: IDataStore;
 }
 
+/**
+ * Built-in semantic color presets that automatically adapt to both Dark and Light themes.
+ */
+export type ColumnColorPreset =
+  | 'blue'
+  | 'indigo'
+  | 'violet'
+  | 'purple'
+  | 'emerald'
+  | 'green'
+  | 'teal'
+  | 'cyan'
+  | 'amber'
+  | 'orange'
+  | 'rose'
+  | 'red'
+  | 'slate';
+
+/**
+ * A color value that can be a semantic preset ('emerald', 'blue', etc.),
+ * a CSS color string, or an explicit { light, dark } theme pair.
+ */
+export type ThemeAwareColor =
+  | ColumnColorPreset
+  | string
+  | {
+      light: string;
+      dark: string;
+    };
+
+/**
+ * Theme-aware styling configuration for a Column or Column Group.
+ * Supports semantic presets ('emerald', 'blue', 'amber', etc.), single CSS colors (auto-adapted),
+ * or explicit { light, dark } color pairs for full control over Dark & Light themes.
+ */
+export interface ColumnColorConfig {
+  /**
+   * Semantic preset ('blue', 'emerald', 'violet', 'amber', 'rose', 'cyan', 'slate', etc.)
+   * that automatically styles group header, column header, and/or column cells
+   * for both Dark and Light themes.
+   */
+  preset?: ColumnColorPreset;
+  /**
+   * Column header background color (or { light, dark } pair).
+   */
+  headerBg?: ThemeAwareColor;
+  /**
+   * Column header text color (or { light, dark } pair).
+   */
+  headerText?: ThemeAwareColor;
+  /**
+   * Top/bottom accent line color on the header (or { light, dark } pair).
+   */
+  headerAccent?: ThemeAwareColor;
+  /**
+   * Column data cells background tint (or { light, dark } pair).
+   */
+  columnBg?: ThemeAwareColor;
+  /**
+   * Column data cells text color (or { light, dark } pair).
+   */
+  columnText?: ThemeAwareColor;
+  /**
+   * Group header band background color (when used on a ColumnGroupDef).
+   */
+  groupHeaderBg?: ThemeAwareColor;
+  /**
+   * Group header band text color (when used on a ColumnGroupDef).
+   */
+  groupHeaderText?: ThemeAwareColor;
+  /**
+   * Group header border / top bar accent color.
+   */
+  borderColor?: ThemeAwareColor;
+}
+
+/**
+ * Banded Column Group definition (`Sütun Grubu`).
+ * Groups multiple columns under a shared top header band with optional theme-aware colors.
+ */
+export interface ColumnGroupDef {
+  /** Unique group identifier */
+  id: string;
+  /** Display title rendered in the top group header band */
+  title: string;
+  /** Optional subtitle or badge shown next to the group title */
+  subtitle?: string;
+  /** List of child column IDs belonging to this group (optional if columns specify `headerGroup` / `groupId`) */
+  columnIds?: string[];
+  /** Quick theme-aware color preset ('emerald', 'blue', 'amber', etc.) or { light, dark } color for the entire group */
+  color?: ThemeAwareColor;
+  /** Explicit header background color (or { light, dark } pair) for columns in this group */
+  headerColor?: ThemeAwareColor;
+  /** Explicit header text color (or { light, dark } pair) for columns in this group */
+  headerTextColor?: ThemeAwareColor;
+  /** Explicit data cell column background color (or { light, dark } pair) for columns in this group */
+  columnColor?: ThemeAwareColor;
+  /** Explicit data cell column text color (or { light, dark } pair) for columns in this group */
+  columnTextColor?: ThemeAwareColor;
+  /** Detailed theme-aware style overrides for group header, child headers, and child cells */
+  style?: ColumnColorConfig;
+  /**
+   * Whether child columns automatically inherit header & cell tint colors from this group (default: true).
+   */
+  inheritColumnColors?: boolean;
+  /** Text alignment of the group header title (default: 'center') */
+  align?: 'left' | 'center' | 'right';
+}
+
 export interface ColumnDef {
   id: ColumnId;
   title: string;
@@ -160,6 +271,41 @@ export interface ColumnDef {
   headerTooltip?: string;
   defaultValue?: any;
   summaryType?: SummaryType;
+
+  /**
+   * Banded Column Group assignment: can be a group ID / group title string,
+   * or an inline ColumnGroupDef object.
+   */
+  headerGroup?: string | ColumnGroupDef;
+  /**
+   * Alias for `headerGroup` (references a `ColumnGroupDef.id` in `columnGroups`).
+   */
+  groupId?: string;
+  /**
+   * Quick theme-aware color preset ('blue', 'emerald', 'amber', 'rose', 'violet', etc.)
+   * or { light, dark } color that styles both the column header and cells.
+   */
+  color?: ThemeAwareColor;
+  /**
+   * Theme-aware header background color (`string | ColumnColorPreset | { light: string; dark: string }`).
+   */
+  headerColor?: ThemeAwareColor;
+  /**
+   * Theme-aware header text color (`string | { light: string; dark: string }`).
+   */
+  headerTextColor?: ThemeAwareColor;
+  /**
+   * Theme-aware column data cell background color (`string | ColumnColorPreset | { light: string; dark: string }`).
+   */
+  columnColor?: ThemeAwareColor;
+  /**
+   * Theme-aware column data cell text color (`string | { light: string; dark: string }`).
+   */
+  columnTextColor?: ThemeAwareColor;
+  /**
+   * Detailed theme-aware color & surface overrides for header and column cells.
+   */
+  style?: ColumnColorConfig;
 
   /**
    * Conditional permission callback per row/cell (cell-level allowEditing rule)
@@ -365,6 +511,8 @@ export interface GridToolbarConfig {
   showClearFilters?: boolean;
   /** Show Batch Save / Discard controls when there are unsaved changes (default: true) */
   showBatchActions?: boolean;
+  /** Show Row Selection Mode switcher ('none' | 'single' | 'multiple') in toolbar */
+  showSelectionModeSwitch?: boolean;
   /** Show Permission Mode switcher (default: true) */
   showPermissionsSwitch?: boolean;
   /** Show Column Settings & Summary configuration popover button (default: true) */

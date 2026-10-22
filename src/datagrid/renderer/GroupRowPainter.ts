@@ -2,6 +2,7 @@ import { VirtualRow } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { ColumnDef } from '../types/grid';
+import { FilterEngine } from '../core/FilterEngine';
 
 export class GroupRowPainter {
   public static paintGroupRow(
@@ -81,6 +82,16 @@ export class GroupRowPainter {
         .join(', ');
     } else if (colDef?.type === 'boolean') {
       displayVal = groupRow.value ? locale.trueText : locale.falseText;
+    } else if (
+      (colDef?.type === 'date' || colDef?.type === 'datetime') &&
+      groupRow.value &&
+      groupRow.value !== '(Blank)'
+    ) {
+      displayVal = FilterEngine.formatLocalizedDate(
+        groupRow.value,
+        locale.code,
+        colDef.type === 'datetime'
+      );
     }
 
     // 6. Group Header Title + Count Badge

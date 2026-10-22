@@ -7,7 +7,12 @@ import { GroupRowPainter } from './GroupRowPainter';
 import { SkeletonPainter } from './SkeletonPainter';
 import { SortDescriptor } from '../types/filter';
 import { IGridLocale } from '../i18n/IGridLocale';
-import { ColumnDef, GridPermissions } from '../types/grid';
+import { ColumnDef, ColumnGroupDef, GridPermissions, RowSelectionMode } from '../types/grid';
+import {
+  ColumnColorEngine,
+  ResolvedColumnStyle,
+  ResolvedGroupHeaderStyle,
+} from '../theme/ColumnColorEngine';
 
 export interface RenderParams {
   canvas: HTMLCanvasElement;
@@ -26,6 +31,8 @@ export interface RenderParams {
   fillDragRange?: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null;
   loadingRowKeys?: Set<any>;
   permissions?: GridPermissions;
+  selectionMode?: RowSelectionMode;
+  selectedRowKeys?: Set<any>;
 }
 
 export class CanvasRenderer {
@@ -54,6 +61,8 @@ export class CanvasRenderer {
       fillDragRange,
       loadingRowKeys,
       permissions,
+      selectionMode = 'none',
+      selectedRowKeys,
     } = params;
 
     const ctx = canvas.getContext('2d');
@@ -159,6 +168,11 @@ export class CanvasRenderer {
           if (!col) continue;
 
           const cellX = geometry.totalFrozenWidth + geometry.scrollableColOffsets[sc] - scrollLeft;
+          const colStyle = ColumnColorEngine.resolveColumnStyle(
+            col,
+            geometry.getColumnGroup(col),
+            theme.isDark
+          );
           this.renderCell(
             ctx,
             rowData,
@@ -178,7 +192,10 @@ export class CanvasRenderer {
             searchKeyword,
             isRowInserted,
             isRowLoading,
-            permissions
+            permissions,
+            selectionMode,
+            selectedRowKeys,
+            colStyle
           );
         }
         ctx.restore();
@@ -190,6 +207,11 @@ export class CanvasRenderer {
           ctx.fillStyle = theme.canvas.bg;
           ctx.fillRect(curFrozenX, rowY, col.width, rowH);
 
+          const colStyle = ColumnColorEngine.resolveColumnStyle(
+            col,
+            geometry.getColumnGroup(col),
+            theme.isDark
+          );
           this.renderCell(
             ctx,
             rowData,
@@ -209,7 +231,10 @@ export class CanvasRenderer {
             searchKeyword,
             isRowInserted,
             isRowLoading,
-            permissions
+            permissions,
+            selectionMode,
+            selectedRowKeys,
+            colStyle
           );
 
           curFrozenX += col.width;
@@ -379,6 +404,60 @@ export class CanvasRenderer {
       }
 
       // ========================================================================
+      // EMPTY STATE (WHEN ROW COUNT === 0)
+      // ========================================================================
+      if (rowCount === 0) {
+        const isTR = locale.code.startsWith('tr');
+        // Draw subtle faint grid lines in background
+        ctx.strokeStyle = theme.canvas.gridLine;
+        ctx.lineWidth = 1;
+        const maxEmptyRows = Math.floor((height - headerH) / rowH);
+        for (let er = 1; er <= maxEmptyRows; er++) {
+          const ey = headerH + er * rowH - 0.5;
+          ctx.beginPath();
+          ctx.moveTo(0, ey);
+          ctx.lineTo(width, ey);
+          ctx.stroke();
+        }
+
+        // Draw Empty State Card in center of viewport
+        const cardW = Math.min(440, width - 40);
+        const cardH = 110;
+        const cardX = Math.max(20, (width - cardW) / 2);
+        const cardY = Math.max(headerH + 20, headerH + (height - headerH - cardH) / 2);
+
+        ctx.save();
+        ctx.fillStyle = theme.isDark ? 'rgba(17, 24, 39, 0.92)' : 'rgba(255, 255, 255, 0.95)';
+        ctx.strokeStyle = theme.canvas.headerBorder;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(cardX, cardY, cardW, cardH, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = theme.dom.accentColor;
+        ctx.font = `700 14px ${theme.fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(
+          isTR ? 'Tabloda Görüntülenecek Veri Bulunmuyor (0 Satır)' : 'No Records to Display (0 Rows)',
+          cardX + cardW / 2,
+          cardY + 38
+        );
+
+        ctx.fillStyle = theme.canvas.rowNumberText;
+        ctx.font = `500 12px ${theme.fontFamily}`;
+        ctx.fillText(
+          isTR
+            ? "Yeni kayıt oluşturmak için üstteki '+ Satır Ekle' butonunu veya Sihirbazı kullanın."
+            : "Click '+ Add Row' in the toolbar or use the Studio Wizard to populate records.",
+          cardX + cardW / 2,
+          cardY + 68
+        );
+        ctx.restore();
+      }
+
+      // ========================================================================
       // COLUMN HEADERS (FIXED AT TOP)
       // ========================================================================
       this.renderHeaders(
@@ -394,7 +473,9 @@ export class CanvasRenderer {
         normSel,
         hoveredFilterColIndex,
         activeFilterColumnIds,
-        permissions
+        permissions,
+        selectionMode,
+        selectedRowKeys
       );
     } finally {
       ctx.restore();
@@ -420,15 +501,94 @@ export class CanvasRenderer {
     searchKeyword?: string,
     isRowInserted?: boolean,
     isRowLoading?: boolean,
-    permissions?: GridPermissions
+    permissions?: GridPermissions,
+    selectionMode: RowSelectionMode = 'none',
+    selectedRowKeys?: Set<any>,
+    colStyle?: ResolvedColumnStyle
   ): void {
     const cellVal = rowData[col.id];
     const isHovered = hoveredCell?.row === rowIndex && hoveredCell?.col === colIdx;
+    const isRowSelectedByCheck = selectedRowKeys?.has(rowKey) ?? false;
     const isReadonly =
       this.isColumnReadonly(col, permissions) ||
       (col.canEdit ? !col.canEdit(rowData, col) : false);
     const isDirty = store.isCellDirty?.(rowKey, col.id) ?? false;
     const isColDirty = store.isColumnDirty?.(col.id) ?? false;
+
+    // Theme-aware column cell background (from column or parent group)
+    if (col.id !== '__selection__' && colStyle?.columnBg) {
+      ctx.fillStyle = colStyle.columnBg;
+      ctx.fillRect(cellX, rowY, colW, rowH);
+    }
+
+    // Row selection tint when selected via Single / Multiple Choice
+    if (isRowSelectedByCheck) {
+      ctx.fillStyle = theme.isDark ? 'rgba(56, 189, 248, 0.14)' : 'rgba(2, 132, 199, 0.10)';
+      ctx.fillRect(cellX, rowY, colW, rowH);
+    }
+
+    // Synthetic Row Selection Column ('__selection__')
+    if (col.id === '__selection__') {
+      const cx = cellX + colW / 2;
+      const cy = rowY + rowH / 2;
+      ctx.save();
+      if (selectionMode === 'single') {
+        const radius = 7.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = isRowSelectedByCheck
+          ? theme.isDark
+            ? 'rgba(56, 189, 248, 0.2)'
+            : 'rgba(2, 132, 199, 0.15)'
+          : theme.dom.inputBg;
+        ctx.fill();
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = isRowSelectedByCheck ? theme.dom.accentColor : theme.canvas.headerBorder;
+        ctx.stroke();
+
+        if (isRowSelectedByCheck) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+          ctx.fillStyle = theme.dom.accentColor;
+          ctx.fill();
+        }
+      } else {
+        const boxSize = 15;
+        const bx = cx - boxSize / 2;
+        const by = cy - boxSize / 2;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, boxSize, boxSize, 4);
+        if (isRowSelectedByCheck) {
+          ctx.fillStyle = theme.dom.accentColor;
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(bx + 3.5, cy);
+          ctx.lineTo(bx + 6.5, cy + 3);
+          ctx.lineTo(bx + 11.5, cy - 3);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = theme.dom.inputBg;
+          ctx.fill();
+          ctx.strokeStyle = isHovered ? theme.dom.accentColor : theme.canvas.headerBorder;
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+
+      // Cell Grid Lines
+      ctx.strokeStyle = theme.canvas.gridLine;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cellX + colW - 0.5, rowY);
+      ctx.lineTo(cellX + colW - 0.5, rowY + rowH);
+      ctx.moveTo(cellX, rowY + rowH - 0.5);
+      ctx.lineTo(cellX + colW, rowY + rowH - 0.5);
+      ctx.stroke();
+      return;
+    }
 
     // DevExtreme-style background for dirty cells (dx-cell-modified), dirty columns, inserted rows, loading, or readonly
     if (isRowLoading) {
@@ -461,7 +621,16 @@ export class CanvasRenderer {
       ctx.fillRect(cellX, rowY, colW, rowH);
     }
 
-    // Column type plugin paint
+    // Column type plugin paint (with optional theme-aware columnText override)
+    const effectiveTheme = colStyle?.columnText
+      ? {
+          ...theme,
+          canvas: {
+            ...theme.canvas,
+            cellText: colStyle.columnText,
+          },
+        }
+      : theme;
     const plugin = ColumnTypeRegistry.get(col.type);
     plugin.paint({
       ctx,
@@ -469,7 +638,7 @@ export class CanvasRenderer {
       row: rowData,
       rowIndex,
       column: col,
-      theme,
+      theme: effectiveTheme,
       locale,
       x: cellX,
       y: rowY,
@@ -523,8 +692,15 @@ export class CanvasRenderer {
     normSel: { minRow: number; maxRow: number; minCol: number; maxCol: number },
     hoveredFilterColIndex?: number | null,
     activeFilterColumnIds?: Set<string>,
-    permissions?: GridPermissions
+    permissions?: GridPermissions,
+    selectionMode: RowSelectionMode = 'none',
+    selectedRowKeys?: Set<any>
   ): void {
+    const rowCount = store.getRowCount();
+    const hasGroups = geometry.hasColumnGroups;
+    const groupH = hasGroups ? geometry.groupHeaderHeight : 0;
+    const colHeaderH = hasGroups ? geometry.baseHeaderHeight : headerH;
+
     // 1. SCROLLABLE HEADERS
     ctx.save();
     ctx.beginPath();
@@ -534,50 +710,117 @@ export class CanvasRenderer {
     ctx.fillStyle = theme.canvas.headerBg;
     ctx.fillRect(geometry.totalFrozenWidth, 0, Math.max(0, width - geometry.totalFrozenWidth), headerH);
 
+    // 1a. Scrollable Column Group Bands (Top Band)
+    if (hasGroups) {
+      this.renderColumnGroupBands(
+        ctx,
+        geometry.scrollableColumns,
+        geometry.frozenColumns.length,
+        (idx) => geometry.totalFrozenWidth + geometry.scrollableColOffsets[idx] - scrollLeft,
+        groupH,
+        theme,
+        normSel,
+        geometry,
+        geometry.totalFrozenWidth,
+        width
+      );
+    }
+
+    // 1b. Scrollable Individual Column Headers
     for (let i = 0; i < geometry.scrollableColumns.length; i++) {
       const col = geometry.scrollableColumns[i];
       const colIdx = geometry.frozenColumns.length + i;
       const x = geometry.totalFrozenWidth + geometry.scrollableColOffsets[i] - scrollLeft;
+      const groupDef = hasGroups ? geometry.getColumnGroup(col) : undefined;
+      const colStyle = ColumnColorEngine.resolveColumnStyle(col, groupDef, theme.isDark);
+      const colY = groupDef ? groupH : 0;
+      const colH = groupDef ? colHeaderH : headerH;
+
       this.renderSingleHeader(
         ctx,
         col,
         colIdx,
         x,
-        0,
+        colY,
         col.width,
-        headerH,
+        colH,
         theme,
         sortRules,
         colIdx >= normSel.minCol && colIdx <= normSel.maxCol,
         hoveredFilterColIndex === colIdx,
         activeFilterColumnIds?.has(col.id) ?? false,
         store.isColumnDirty?.(col.id) ?? false,
-        permissions
+        permissions,
+        selectionMode,
+        selectedRowKeys?.size || 0,
+        rowCount,
+        colStyle,
+        Boolean(groupDef)
       );
     }
     ctx.restore();
 
     // 2. FROZEN HEADERS
+    const frozenXOffsets: number[] = [];
+    let accFrozenX = rowNumW;
+    for (let i = 0; i < geometry.frozenColumns.length; i++) {
+      frozenXOffsets.push(accFrozenX);
+      accFrozenX += geometry.frozenColumns[i].width;
+    }
+
     let curX = rowNumW;
     for (let i = 0; i < geometry.frozenColumns.length; i++) {
       const col = geometry.frozenColumns[i];
       ctx.fillStyle = theme.canvas.headerBg;
       ctx.fillRect(curX, 0, col.width, headerH);
+      curX += col.width;
+    }
+
+    // 2a. Frozen Column Group Bands (Top Band)
+    if (hasGroups && geometry.frozenColumns.length > 0) {
+      this.renderColumnGroupBands(
+        ctx,
+        geometry.frozenColumns,
+        0,
+        (idx) => frozenXOffsets[idx],
+        groupH,
+        theme,
+        normSel,
+        geometry,
+        rowNumW,
+        geometry.totalFrozenWidth
+      );
+    }
+
+    // 2b. Frozen Individual Column Headers
+    curX = rowNumW;
+    for (let i = 0; i < geometry.frozenColumns.length; i++) {
+      const col = geometry.frozenColumns[i];
+      const groupDef = hasGroups ? geometry.getColumnGroup(col) : undefined;
+      const colStyle = ColumnColorEngine.resolveColumnStyle(col, groupDef, theme.isDark);
+      const colY = groupDef ? groupH : 0;
+      const colH = groupDef ? colHeaderH : headerH;
+
       this.renderSingleHeader(
         ctx,
         col,
         i,
         curX,
-        0,
+        colY,
         col.width,
-        headerH,
+        colH,
         theme,
         sortRules,
         i >= normSel.minCol && i <= normSel.maxCol,
         hoveredFilterColIndex === i,
         activeFilterColumnIds?.has(col.id) ?? false,
         store.isColumnDirty?.(col.id) ?? false,
-        permissions
+        permissions,
+        selectionMode,
+        selectedRowKeys?.size || 0,
+        rowCount,
+        colStyle,
+        Boolean(groupDef)
       );
       curX += col.width;
     }
@@ -606,6 +849,171 @@ export class CanvasRenderer {
     }
   }
 
+  private static renderColumnGroupBands(
+    ctx: CanvasRenderingContext2D,
+    columns: ColumnDef[],
+    colOffsetStartIdx: number,
+    getColX: (localIdx: number) => number,
+    groupH: number,
+    theme: IGridThemeTokens,
+    normSel: { minRow: number; maxRow: number; minCol: number; maxCol: number },
+    geometry: GeometryEngine,
+    minVisibleX: number = 0,
+    maxVisibleX: number = 99999
+  ): void {
+    let i = 0;
+    while (i < columns.length) {
+      const col = columns[i];
+      const groupDef = geometry.getColumnGroup(col);
+      if (!groupDef) {
+        i++;
+        continue;
+      }
+
+      let j = i;
+      let spanWidth = col.width;
+      while (j + 1 < columns.length) {
+        const nextGroup = geometry.getColumnGroup(columns[j + 1]);
+        if (nextGroup && nextGroup.id === groupDef.id) {
+          j++;
+          spanWidth += columns[j].width;
+        } else {
+          break;
+        }
+      }
+
+      const spanX = getColX(i);
+      const startGlobalCol = colOffsetStartIdx + i;
+      const endGlobalCol = colOffsetStartIdx + j;
+      const isGroupActive =
+        normSel.maxCol >= startGlobalCol && normSel.minCol <= endGlobalCol;
+
+      const groupStyle = ColumnColorEngine.resolveGroupStyle(groupDef, theme.isDark);
+      this.renderSingleGroupHeaderBand(
+        ctx,
+        groupDef,
+        groupStyle,
+        spanX,
+        0,
+        spanWidth,
+        groupH,
+        theme,
+        isGroupActive,
+        minVisibleX,
+        maxVisibleX
+      );
+
+      i = j + 1;
+    }
+  }
+
+  private static renderSingleGroupHeaderBand(
+    ctx: CanvasRenderingContext2D,
+    groupDef: ColumnGroupDef,
+    groupStyle: ResolvedGroupHeaderStyle,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    theme: IGridThemeTokens,
+    isGroupActive: boolean,
+    minVisibleX: number = 0,
+    maxVisibleX: number = 99999
+  ): void {
+    ctx.save();
+
+    // 1. Group Band Background
+    ctx.fillStyle =
+      groupStyle.headerBg ||
+      (theme.isDark ? 'rgba(255, 255, 255, 0.045)' : 'rgba(15, 23, 42, 0.04)');
+    ctx.fillRect(x, y, w, h);
+
+    if (isGroupActive && !groupStyle.headerBg) {
+      ctx.fillStyle = theme.isDark ? 'rgba(10, 132, 255, 0.12)' : 'rgba(0, 122, 255, 0.07)';
+      ctx.fillRect(x, y, w, h);
+    }
+
+    // 2. Top Accent Border (1px crisp hairline)
+    const accentColor = groupStyle.headerAccent || (isGroupActive ? theme.dom.accentColor : undefined);
+    if (accentColor) {
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = accentColor;
+      ctx.fillRect(x, y, w, 1);
+      ctx.restore();
+    }
+
+    // 3. Borders (Right & Bottom Divider)
+    ctx.strokeStyle = groupStyle.borderColor || theme.canvas.headerBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + w - 0.5, y);
+    ctx.lineTo(x + w - 0.5, y + h);
+    ctx.moveTo(x, y + h - 0.5);
+    ctx.lineTo(x + w, y + h - 0.5);
+    ctx.stroke();
+
+    // 4. Sticky Viewport-Clamped Group Title & Color Dot
+    const visStart = Math.max(x, minVisibleX);
+    const visEnd = Math.min(x + w, maxVisibleX);
+    const visW = Math.max(0, visEnd - visStart);
+
+    if (visW >= 24) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(visStart + 6, y, Math.max(0, visW - 12), h);
+      ctx.clip();
+
+      const textColor = groupStyle.headerText || theme.canvas.headerText;
+      ctx.fillStyle = textColor;
+      ctx.font = `700 ${Math.max(10, theme.headerFontSize - 1)}px ${theme.fontFamily}`;
+      ctx.textBaseline = 'middle';
+
+      const align = groupDef.align || 'center';
+      const cy = y + h / 2 + 0.5;
+
+      if (align === 'left') {
+        let textX = visStart + 10;
+        if (accentColor && visW >= 90) {
+          ctx.beginPath();
+          ctx.arc(textX + 3, cy, 3.2, 0, Math.PI * 2);
+          ctx.fillStyle = accentColor;
+          ctx.fill();
+          textX += 11;
+        }
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'left';
+        ctx.fillText(groupDef.title, textX, cy);
+      } else if (align === 'right') {
+        ctx.textAlign = 'right';
+        ctx.fillText(groupDef.title, visEnd - 10, cy);
+      } else {
+        ctx.textAlign = 'center';
+        const titleMetrics = ctx.measureText(groupDef.title);
+        const totalTitleW = titleMetrics.width;
+        const centerX = visStart + visW / 2;
+        if (accentColor && visW >= totalTitleW + 30) {
+          const dotX = centerX - totalTitleW / 2 - 7;
+          ctx.beginPath();
+          ctx.arc(dotX, cy, 3.2, 0, Math.PI * 2);
+          ctx.fillStyle = accentColor;
+          ctx.fill();
+          ctx.fillStyle = textColor;
+          ctx.fillText(groupDef.title, centerX + 4, cy);
+        } else if (visW < totalTitleW + 16) {
+          ctx.textAlign = 'left';
+          ctx.fillText(groupDef.title, visStart + 8, cy);
+        } else {
+          ctx.fillText(groupDef.title, centerX, cy);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
   private static renderSingleHeader(
     ctx: CanvasRenderingContext2D,
     col: ColumnDef,
@@ -620,22 +1028,42 @@ export class CanvasRenderer {
     isFilterHovered: boolean,
     isFilterActive: boolean,
     isColumnDirty: boolean,
-    permissions?: GridPermissions
+    permissions?: GridPermissions,
+    selectionMode: RowSelectionMode = 'none',
+    selectedCount: number = 0,
+    totalRowCount: number = 0,
+    colStyle?: ResolvedColumnStyle,
+    hasParentGroup: boolean = false
   ): void {
     ctx.save();
+
+    // Custom theme-aware column header background
+    if (col.id !== '__selection__' && colStyle?.headerBg) {
+      ctx.fillStyle = colStyle.headerBg;
+      ctx.fillRect(x, y, w, h);
+    }
 
     if (isColumnDirty) {
       ctx.fillStyle = theme.isDark ? 'rgba(34, 197, 94, 0.16)' : 'rgba(22, 163, 74, 0.12)';
       ctx.fillRect(x, y, w, h);
       ctx.fillStyle = theme.isDark ? '#22C55E' : '#16A34A';
-      ctx.fillRect(x, y, w, 2.5);
+      ctx.fillRect(x, y, w, 1.5);
     } else if (isColSelected) {
       ctx.fillStyle = theme.isDark ? 'rgba(10, 132, 255, 0.12)' : 'rgba(0, 122, 255, 0.07)';
       ctx.fillRect(x, y, w, h);
     }
 
+    // Top accent border on ungrouped colored column headers (1px crisp hairline)
+    if (!isColumnDirty && !hasParentGroup && colStyle?.headerAccent && col.id !== '__selection__') {
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = colStyle.headerAccent;
+      ctx.fillRect(x, y, w, 1);
+      ctx.restore();
+    }
+
     // Borders
-    ctx.strokeStyle = theme.canvas.headerBorder;
+    ctx.strokeStyle = colStyle?.borderColor || theme.canvas.headerBorder;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x + w - 0.5, y);
@@ -644,9 +1072,58 @@ export class CanvasRenderer {
     ctx.lineTo(x + w, y + h - 0.5);
     ctx.stroke();
 
+    // Synthetic Row Selection Header ('__selection__')
+    if (col.id === '__selection__') {
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      if (selectionMode === 'single') {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+        ctx.strokeStyle = theme.canvas.headerText;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = theme.canvas.headerText;
+        ctx.fill();
+      } else {
+        const boxSize = 15;
+        const bx = cx - boxSize / 2;
+        const by = cy - boxSize / 2;
+        const isAllSelected = totalRowCount > 0 && selectedCount >= totalRowCount;
+        const isSomeSelected = selectedCount > 0 && selectedCount < totalRowCount;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, boxSize, boxSize, 4);
+        if (isAllSelected || isSomeSelected) {
+          ctx.fillStyle = theme.dom.accentColor;
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          if (isAllSelected) {
+            ctx.moveTo(bx + 3.5, cy);
+            ctx.lineTo(bx + 6.5, cy + 3);
+            ctx.lineTo(bx + 11.5, cy - 3);
+          } else {
+            ctx.moveTo(bx + 3.5, cy);
+            ctx.lineTo(bx + 11.5, cy);
+          }
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = theme.dom.inputBg;
+          ctx.fill();
+          ctx.strokeStyle = theme.canvas.headerBorder;
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+      return;
+    }
+
     // Active column bottom highlight bar
     if (isColSelected) {
-      ctx.fillStyle = theme.dom.accentColor;
+      ctx.fillStyle = colStyle?.headerAccent || theme.dom.accentColor;
       ctx.fillRect(x, y + h - 2, w, 2);
     }
 
@@ -663,7 +1140,7 @@ export class CanvasRenderer {
     ctx.rect(x + 8, y, Math.max(0, w - rightReserved - 8), h);
     ctx.clip();
 
-    ctx.fillStyle = theme.canvas.headerText;
+    ctx.fillStyle = colStyle?.headerText || theme.canvas.headerText;
     ctx.font = `600 ${theme.headerFontSize}px ${theme.fontFamily}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
@@ -676,7 +1153,7 @@ export class CanvasRenderer {
     if (sortIndex !== -1) {
       const sort = sortRules[sortIndex];
       ctx.save();
-      ctx.fillStyle = theme.dom.accentColor;
+      ctx.fillStyle = colStyle?.headerAccent || theme.dom.accentColor;
       ctx.font = `700 10px ${theme.fontFamily}`;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
@@ -694,7 +1171,7 @@ export class CanvasRenderer {
 
       ctx.save();
       if (isFilterActive) {
-        ctx.fillStyle = theme.dom.accentColor;
+        ctx.fillStyle = colStyle?.headerAccent || theme.dom.accentColor;
         ctx.beginPath();
         ctx.roundRect(btnX, btnY, btnSize, btnSize, 5);
         ctx.fill();
@@ -710,10 +1187,15 @@ export class CanvasRenderer {
       ctx.fillStyle = isFilterActive
         ? '#FFFFFF'
         : isFilterHovered
-        ? theme.canvas.headerText
+        ? colStyle?.headerText || theme.canvas.headerText
+        : colStyle?.headerText
+        ? colStyle.headerText
         : theme.isDark
         ? '#98989D'
         : '#8E8E93';
+      if (!isFilterActive && !isFilterHovered && colStyle?.headerText) {
+        ctx.globalAlpha = 0.72;
+      }
 
       ctx.beginPath();
       ctx.moveTo(fx - 5, fy - 4);
